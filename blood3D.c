@@ -22,7 +22,7 @@
 #define FIELD_MAX_IM 100000
 
 typedef struct bloodData{
-	int amp, xc, yc, zc, dxx, dyy;
+	int amp, xc, yc, zc, dx, dy;
 	double theta, fi, psi;
 } bloodData;
 
@@ -173,8 +173,8 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
 
                 /* Displace centers of whole layer in x-y */
 				/* to create randomness in geometry.      */
-				bD[zb][yb][xb]->dxx = (int)random1(sD->zbox);
-				bD[zb][yb][xb]->dyy = (int)random1(sD->zbox);
+				bD[zb][yb][xb]->dx = (int)random1(sD->zbox);
+				bD[zb][yb][xb]->dy = (int)random1(sD->zbox);
 				bD[zb][yb][xb]->theta = random1(2*pi);
 				bD[zb][yb][xb]->fi = random1(2*pi);
 				bD[zb][yb][xb]->psi = random1(2*pi);
@@ -202,20 +202,20 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
 void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z){
 
 	int xmax=sD->xAnt, zmax=sD->zAnt, ymax=sD->yAnt;
-	int x, y, zb, xb, dxxx, dyyy,
-	yb, xbox=sD->xbox, ybox=sD->ybox, zbox=sD->zbox, ix,
-	jz, iy, antal=0;
+	int x, y, zb, xb, dx, dy, yb, ix, jz, iy;
 	double a1, a2, a3, cost, sint, a=-0.00000005692,
 	b=0.00000005692, abc, c=0.00227,
 	sinf, cosf, sinp, cosp;
 
-	for (y=0;y<ymax;y++) {
-		for (x=0;x<xmax;x++) {
-
-			/* Calculate which box */
-			zb=z/zbox;
-			xb=x/xbox;
-			yb=y/ybox;
+    /* Iterate over the whole xy-plane */
+	for (y=0;y<ymax;y++) 
+	{
+		for (x=0;x<xmax;x++) 
+		{
+			/* Calculate which cell */
+			zb=z/sD->zbox;
+			xb=x/sD->xbox;
+			yb=y/sD->ybox;
 
 			/* Calculate angles */
 			cost = cos(bD[yb][xb]->theta);
@@ -229,21 +229,19 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z){
 			jz = z - bD[yb][xb]->zc ;
 			iy = y - bD[yb][xb]->yc ;
 
-			/* Transform to spherical coordinates */
-
+			/* Transform from spherical coordinates */
 			a1 = ix*(cosp*cosf-cost*sinf*sinp) + iy*(cosp*sinf+cost*cosf*sinp) + jz*sinp*sint;
 			a2 = ix*(-sinp*cosf-cost*sinf*cosp) + iy*(-sinp*sinf+cost*cosf*cosp) + jz*cosp*sint;
 			a3 = ix*(sint*sinf) + iy *(-sint*cosf) + jz*(cost);
 
 			abc = a*(a1*a1+a2*a2)+b*(a1*a1+a2*a2)*(a1*a1+a2*a2)+c*a3*a3;
 			if (abc < 1.0) {
-				dxxx = bD[zb][1]->dxx;
-				dyyy = bD[zb][1]->dyy;
-				eps[(x+dxxx)%xmax][(y+dyyy)%ymax] = bD[yb][xb]-> amp;
+				dx = bD[yb][xb]->dx;
+				dy = bD[yb][xb]->dy;
+				eps[(x+dx)%xmax][(y+dy)%ymax] = bD[yb][xb]-> amp;
 			}
 		}
 	}
-
 }
 
 /* migrate the fields one layer ****************************************/
