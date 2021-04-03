@@ -1,4 +1,4 @@
-/* Bo-Göran Wallner */
+/* Bo-Gï¿½ran Wallner */
 
 #include <stdio.h>
 #include <math.h>
@@ -41,10 +41,6 @@ typedef struct modelData{
 	double backRe, backIm; /* backgound permittivity */
 } modelData;
 
-
-/* extern variables */
-FILE *fphelp; /* debugging output file */
-FILE *fphelp2; /* debugging output file */
 
 /* output of structures ************************************/
 
@@ -138,10 +134,9 @@ double random1(double a){
 
 
 /* 
- * Funktionen allokerar upp en grid "dim1 x dim2 x dim3" med bloodData i
- * varje punkt.
+ * Memoryallocation of bloodData 3D array
  */
-bloodData ****multialloc3blood(int dim1, int dim2, int dim3)
+bloodData ****mallocBloodData3DArray(int dim1, int dim2, int dim3)
 {
 	int i, j, k;
 	bloodData ****a = (bloodData ****) malloc(dim1 * sizeof(bloodData ***));
@@ -154,53 +149,44 @@ bloodData ****multialloc3blood(int dim1, int dim2, int dim3)
 			}
 		}
 	}
-
 	return a;
 }
 
 /* 
- * Skapar en 3D grid med samplingspunkter, varje lager slumpmässigt förskjutet
- * i förhållande till varandra.
+ * Create 3D array with bloodData
  */
-void initialize3DGrid(sampData *sD, bloodData ****bD, double wanted, FILE *fpmodel)
+void initBloodData3DArray(sampData *sD, bloodData ****bD)
 {
-	int xmax=sD->xAnt, zmax=sD->zAnt, ymax=sD->yAnt;
-	int xboxAnt, zboxAnt, yboxAnt;
+	int nbrOfXbox, nbrOfYbox, nbrOfZbox;
 	int zb, xb, yb;
-	int xbox=sD->xbox, ybox=sD->ybox, zbox=sD->zbox; 
-	
-	
-	xboxAnt = xmax/xbox;
-	zboxAnt = zmax/zbox;
-	yboxAnt = ymax/ybox;
 
-	printf("Skapar skelett\n");
-	/* Loops through all boxex, notice loops from 0->(xboxAnt-1) */
-	for (xb=0; xb<xboxAnt; xb++){
-		for (yb=0; yb<yboxAnt; yb++){
-			for (zb=0; zb<zboxAnt; zb++) {
-				bD[zb][yb][xb] -> zc = (zb+1)*zbox-zbox/2;
-				bD[zb][yb][xb] -> xc = (xb+1)*xbox-xbox/2;
-				bD[zb][yb][xb] -> yc = (yb+1)*ybox-ybox/2;
+	nbrOfXbox = sD->xAnt/sD->xbox;
+	nbrOfZbox = sD->zAnt/sD->zbox;
+	nbrOfYbox = sD->yAnt/sD->ybox;
 
-        /* Förskjut lager i x-y led */
-				bD[zb][yb][xb] -> dxx = (int)random1(zbox);
-				bD[zb][yb][xb] -> dyy = (int)random1(zbox);
-				bD[zb][yb][xb] -> theta = random1(2*pi);
-				bD[zb][yb][xb] -> fi = random1(2*pi);
-				bD[zb][yb][xb] -> psi = random1(2*pi);
-				bD[zb][yb][xb] -> amp = 1;
+	for (xb = 0; xb < nbrOfXbox; xb++){
+		for (yb = 0; yb < nbrOfYbox; yb++){
+			for (zb = 0; zb < nbrOfZbox; zb++) {
+				bD[zb][yb][xb]->zc = (zb+1)*sD->zbox-sD->zbox/2;
+				bD[zb][yb][xb]->xc = (xb+1)*sD->xbox-sD->xbox/2;
+				bD[zb][yb][xb]->yc = (yb+1)*sD->ybox-sD->ybox/2;
+
+                /* Displace centers of whole layer in x-y */
+				/* to create randomness in geometry.      */
+				bD[zb][yb][xb]->dxx = (int)random1(sD->zbox);
+				bD[zb][yb][xb]->dyy = (int)random1(sD->zbox);
+				bD[zb][yb][xb]->theta = random1(2*pi);
+				bD[zb][yb][xb]->fi = random1(2*pi);
+				bD[zb][yb][xb]->psi = random1(2*pi);
+				bD[zb][yb][xb]->amp = 1;
 
 			}
 		}
 	}
 	
-	fpmodel = fopen( "model.dat", "w");
-	fprintf(fpmodel, "%s\t %s\t %s\t %s\t %s\t %s\t %s\t %s\t %s\t %s\n" , "x", "y", "z", "Amplitude", "Theta", "Fi","Psi", "xc", "yc","zc");
-	for (zb=0; zb<zboxAnt; zb++){
-		for (yb=0; yb<yboxAnt; yb++){
-			for (xb=0; xb<xboxAnt; xb++) {
-				fprintf(fpmodel,"%d\t %d\t %d\t %d\t %f\t %f\t %f\t %d\t %d\t %d\n", xb, yb, zb, bD[zb][yb][xb]->amp, bD[zb][yb][xb]->theta,
+	for (zb=0; zb<nbrOfZbox; zb++){
+		for (yb=0; yb<nbrOfYbox; yb++){
+			for (xb=0; xb<nbrOfXbox; xb++) {
 				bD[zb][yb][xb]->fi, bD[zb][yb][xb]->psi, bD[zb][yb][xb]->xc, bD[zb][yb][xb]->yc,
 				bD[zb][yb][xb]->zc);
 			}
@@ -210,7 +196,7 @@ void initialize3DGrid(sampData *sD, bloodData ****bD, double wanted, FILE *fpmod
 
 
 /* 
-* Fyll ett tvådimensionellt lager i modellen för fixt z!) 
+* Fill 2D geometry layer fox fixed z 
 */
 
 void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z){
@@ -226,12 +212,12 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z){
 	for (y=0;y<ymax;y++) {
 		for (x=0;x<xmax;x++) {
 
-			/* Beräkna vilken "låda" vi är i */
+			/* Calculate which box */
 			zb=z/zbox;
 			xb=x/xbox;
 			yb=y/ybox;
 
-			/* Beräkna vinklar */
+			/* Calculate angles */
 			cost = cos(bD[yb][xb]->theta);
 			sint = sin(bD[yb][xb]->theta);
 			sinf = sin(bD[yb][xb]->fi);
@@ -243,7 +229,7 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z){
 			jz = z - bD[yb][xb]->zc ;
 			iy = y - bD[yb][xb]->yc ;
 
-			/* Transform coordinates */
+			/* Transform to spherical coordinates */
 
 			a1 = ix*(cosp*cosf-cost*sinf*sinp) + iy*(cosp*sinf+cost*cosf*sinp) + jz*sinp*sint;
 			a2 = ix*(-sinp*cosf-cost*sinf*cosp) + iy*(-sinp*sinf+cost*cosf*cosp) + jz*cosp*sint;
@@ -423,7 +409,7 @@ MatDoub& uin, MatDoub& urefl) {
 		}
 	}
 
-	/* Obs: längd e nu "ymax x 2*xmax" */
+	/* Obs: lï¿½ngd e nu "ymax x 2*xmax" */
 	if (refl == 1) {
 		
 		y = 0;
@@ -499,192 +485,113 @@ MatDoub& uin, MatDoub& urefl) {
 
 
 /* main program to propagate the field through the a sequence of layers */
-void propagate(sampData *sD, modelData *mD, double wanted, FILE *fptrans, FILE *fpfield) {
+void propagate(sampData *sD, modelData *mD) {
 
-	int xmax=sD->xAnt, zmax=sD->zAnt, ymax=sD->yAnt, zout=sD->zout, xout=sD->xout, imax=2;
-	double dx=sD->dx, dz=sD->dz, dy=sD->dy;
-	int xbox=sD->xbox, ybox=sD->ybox, zbox=sD->zbox;
 	int x, y, z;
-	double energytrans=0.0, epsr=mD->epsilonRe;
-	extern FILE *fphelp, *fphelp2;
-    
-    int a = 0;
-    MatDoub umig(ymax, 2*xmax, a);
-    MatDoub uref(ymax, 2*xmax, a);
-    
-    /* Allocate memory for layers */
-    MatInt model(ymax, xmax, a);
-    MatInt nextmodel(ymax, xmax, a);
+	double powerTransmitted;
 
+	/* Indexing [z][y][x] will be used where z is in propagation direction  */
+	/* Fields in plane [y][x] will have Re[field] = field[y][x]             */
+	/* and Im[field] = field[y][x+1]                                        */
+
+   /* Declare geometry layers */
+    MatInt sampleLayer1(sD->yAnt, sD->xAnt);
+    MatInt sampleLayer2(sD->yAnt, sD->xAnt);
+    
+	/* Declare field, Real + Imaginary parts */
+    MatDoub umig(sD->yAnt, 2*sD->xAnt);
+    MatDoub uref(sD->yAnt, 2*sD->xAnt);
+
+    /* bD pointer to 3D array with bloodData */
 	bloodData ****bD;
 
-	/* Allocate memory for 3D grid, every point containing bloodData.
-	 * This 3D grid contains ONLY centers for bloodcells together with
-	 * their properties.
-	 */
-
-	bD = multialloc3blood(zmax/zbox, ymax/ybox, xmax/xbox);
-	wanted=0.4;
+	/* Allocate memory for 3D array, every point containing bloodData */
+	bD = mallocBloodData3DArray( sD->zAnt/sD->zbox, sD->yAnt/sD->ybox, sD->xAnt/sD->xbox );
 
 	/* Initialize the 3D grid, blood cell centers only */
-	initialize3DGrid(sD, bD, wanted, fphelp);
+	initBloodData3DArray( sD, bD );
 
-	/* Set boundary field with initiale values */
-	for (y=0; y<ymax; y++) {
-		for (x=0; x<2*xmax; x+=2) {
-			umig[y][x] = 1000; //1.0;
+	/* Input field:     Re = 1.0 Im = 0.0   */
+	/* Reflected field: Re = 0.0 Im = 0.0   */
+	for (y = 0; y < sD->yAnt; y++) 
+	{
+		for (x = 0; x < 2*sD->xAnt; x+=2) 
+		{
+			umig[y][x] =   1.0;
 			umig[y][x+1] = 0.0;
-			
-			/* Reflected field */
-			uref[y][x] = 0;
+			uref[y][x]   = 0;
 			uref[y][x+1] = 0;
 		}
 	}
 
-	printf("Propagate \n");
-	fphelp = fopen("powerout", "w");
-
-	/* Start propagate from z=0 to z=zmax-1 */
-	for (z=0; z<zmax; z++) {
+	/* Start propagate from z=0 to z=(sD->zAnt-2) */
+	for (z = 0; z < (sD->zAnt - 1) ; z++) 
+	{
 		
 		/* Fill two layers in xy-plane with sample points */ 
-		fill2DLayer(sD, bD[z/zbox], model ,z);
-		fill2DLayer(sD, bD[(z+1)/zbox], nextmodel,z+1);
-        
-        printf("Kalle\n");
+		fill2DLayer(sD, bD[z/sD->zbox], sampleLayer1, z);
+		fill2DLayer(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
 
 		/* Migrate between the two layers */
-		migrate(sD, mD, model, umig);
+		migrate(sD, mD, sampleLayer1, umig);
         
 		/* Calculate interaction between two layers */
-		interaction(sD, mD, model, nextmodel, umig, uref);
+		interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
 
 		/* Calculate power in z by summing over x-y plane */
-		for (y=0; y<ymax; y++) {
-			for (x=0; x<2*xmax; x+=2) {
-				energytrans += (umig[y][x]*umig[y][x]+umig[y][x+1]*umig[y][x+1])*(1.0+epsr*model[y][x/2]);
+		powerTransmitted = 0.0;
+		for ( y = 0; y < sD->yAnt; y++) 
+		{
+			for (x = 0; x < 2*sD->xAnt; x+=2) 
+			{
+				powerTransmitted += (umig[y][x]*umig[y][x]+umig[y][x+1]*umig[y][x+1])*
+				                    (1.0+mD->epsilonRe*sampleLayer1[y][x/2]);
 			}
 		}
 
-			
 		/* normalize */
-				energytrans = energytrans/(xmax*ymax);
-				fprintf(fphelp,"%f\n", energytrans);
-				printf("z=%d\t energy=%f\n", z, energytrans);
-				energytrans = 0.0;
-
-
-		//if (fptrans) {
-		//	for (y=0; y<ymax; y++) {
-		//		for (x=0; x<2*xmax; x++){
-		//			fprintf(fptrans, "%lf\n", umig[y][x]);
-		//		}
-		//	}
-		//}
+		powerTransmitted = powerTransmitted/(sD->xAnt*sD->yAnt);
+		printf("z=%d\t energy=%f\n", z, powerTransmitted);
 	}
 
-
-	fclose(fptrans);
-	fclose(fphelp);
-	printf("i7 %d\n");
-	/* multidealloc3(v1, imax, ymax, 2*xmax);
-	multidealloc2(umig, ymax, 2*xmax); */
-	//free(uref);
-	//multidealloc2int(nextmodel, sD->yAnt, sD->xAnt);
 	printf("propagation end \n");
 }
-/* the main: input of data....
-************************************************/
-int main(int argc, char* argv[]) {
-	int x, y, z, r, error=0, error1=0;
-	double tid, wanted=0.4;
-	char
-	outfile[80], /* output name */
-	logfile[80], /* program log file */
-	transfile[80], /* transmitted field file */
-	fieldfile[80], /* internal field file */
-	helpfile[80], helpfile2[80]; /* help files */
-	FILE *fptrans, *fpfield, *fplog; /* output files */
 
-	extern FILE *fphelp, *fphelp2;
-	time_t starttid = time(NULL), sluttid;
-	int t1, t2;
-	sampData *sD;
-	modelData *mD;
-	sD = (sampData *) malloc(sizeof(*sD));
-	mD = (modelData *) malloc(sizeof(*mD));
+/************************************************/
+int main(int argc, char* argv[]) 
+{
+	sampData sD;
+	modelData mD;
 
-
-	/* Sample points for all modell */	
-	sD->xAnt = 1024;      /* first transverse direction */
-	sD->yAnt = 1024; /* second transverse direction */
-	sD->zAnt = 1024; //256;      /* depth */
-	sD->dx = 0.1;          
-	sD->dy = 0.1; 
-	sD->dz = 0.1;          /* depth step */
+	/* Sample points for all model */	
+	sD.xAnt = 1024; /* first transverse direction  */
+	sD.yAnt = 1024; /* second transverse direction */
+	sD.zAnt = 1024; /* depth                       */
+	sD.dx = 0.1;    /* depth step                  */
+	sD.dy = 0.1;
+	sD.dz = 0.1;
 		
 	
-	/* Size of box containing one bloodcell.     */
-	/* Let this be 1/8 of total size.            */
-	/* Having 128x128 gridpoints then implies    */
-	/* 8x8 boxes each containing 16^3 = 4096     */
-	/* samplepoints.                             */
-	sD->xbox = sD->xAnt / 8;
-	sD->ybox = sD->xAnt / 8;
-	sD->zbox = sD->xAnt / 8;
+	/* Size of box containing one bloodcell. Let this be 1/8 */
+	/* of total number of samplepoints.                      */
+	sD.xbox = sD->xAnt / 8;
+	sD.ybox = sD->xAnt / 8;
+	sD.zbox = sD->xAnt / 8;
 
-	sD->zout = 128; //atoi(argv[11]);
-	sD->xout = 128;
-	sD->iAnt=2; /* pre defined quanitites */
+	sD.zout = 128;
+	sD.xout = 128;
+	sD.iAnt=2;
 		
 		
 	/* Field data */
-	mD->afreq = 0.1; //atof(argv[8]); /* frequency */
-	mD->epsilonRe = 1.94; //atof(argv[9]); /*permittivity */
-	mD->epsilonIm = 0.0002; //atof(argv[10]); /*permittivity */
-	mD->backRe = 1.81;
-	mD->backIm = 0.0;
-		
+	mD.afreq = 0.1;        /* frequency    */
+	mD.epsilonRe = 1.94;   /* permittivity */
+	mD.epsilonIm = 0.0002; /* permittivity */
+	mD.backRe = 1.81;
+	mD.backIm = 0.0;
 
-	strcpy( logfile, outfile);
-	strcat( logfile, ".log");
-	fplog = fopen( logfile, "w");
-	strcpy( transfile, outfile);
-	strcat( transfile, "_trans.out");
-	fptrans = fopen( transfile, "w");
-	strcpy( fieldfile, outfile);
-	strcat( fieldfile, "_field.out");
-	fpfield = fopen( fieldfile, "w");
-	strcpy( helpfile, outfile);
-	strcat( helpfile, "_help.out");
-	fphelp = fopen( helpfile, "w");
-	strcpy( helpfile2, outfile);
-	strcat( helpfile2, "_help2.out");
-	fphelp2 = fopen( helpfile2, "w");
-	printfsampData(sD);
-	printfmodelData(mD);
-
-	t1 = clock();
-	/* input of the model */
-	x = 0;
-	z = 0;
-	r = 0;
-	y = 0;
-	error1 = 0;
 	/* Model contains 2D layer with ALL samplepoints */
-	if (error==0) {
-		printf("2 propagate\n");
-		propagate(sD, mD, wanted, fptrans, fpfield);
-	} 
-	else
-	printf("Terminating program, Input Error: %d.\n", error);
-	sluttid = time(NULL);
-	fprintf(fplog, "end on ");
-	fprintf(fplog, ctime(&sluttid));
-	tid = difftime(sluttid, starttid);
-	fprintf(fplog, "total time: %.0f\t: %.0f:%.0f\n", tid, tid/3600, tid/60);
-	t2 = clock();
-	fprintf(fplog, "CPU clock: %d\t%d\t%e\n", t1, t2, (t2-t1)/1000000.0);
+	propagate( &sD, &mD );
 
 	free(sD);
 	free(mD);
