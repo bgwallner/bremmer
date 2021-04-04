@@ -180,7 +180,7 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
 				/* we get 8 cells having centers (0+0.5)*128 = 64, (1+0.5)*128 = 192, */
 				/* (2+0.5)* 128 = 320, ... (7+0.5)*128 = 960                          */
 
-                /* Assign values for the angles */
+                /* Assign values for the Euler angles */
 #ifdef (ANGLES_RANDOM == 1)
 				bD[zb][yb][xb]->theta = random1(2*pi);
 				bD[zb][yb][xb]->fi = random1(2*pi);
@@ -213,25 +213,23 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
 * Fill 2D geometry layer fox fixed z 
 */
 
-void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z){
-
-	int xmax=sD->xAnt, zmax=sD->zAnt, ymax=sD->yAnt;
+void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
+{
 	int x, y, zb, xb, dx, dy, yb, ix, jz, iy;
-	double a1, a2, a3, cost, sint, a=-0.00000005692,
-	b=0.00000005692, abc, c=0.00227,
-	sinf, cosf, sinp, cosp;
+	double P, Q, R, fBiconcaveDisk;
+	double cost, sint, sinf, cosf, sinp, cosp;
 
     /* Iterate over the whole xy-plane */
-	for (y=0;y<ymax;y++) 
+	for (y=0; y<sD->yAnt; y++) 
 	{
-		for (x=0;x<xmax;x++) 
+		for (x=0; x<sD->xAnt; x++) 
 		{
 			/* Calculate which cell */
 			zb=z/sD->zbox;
 			xb=x/sD->xbox;
 			yb=y/sD->ybox;
 
-			/* Calculate angles */
+			/* Pre-assign Euler angels to simplify expressions */
 			cost = cos(bD[yb][xb]->theta);
 			sint = sin(bD[yb][xb]->theta);
 			sinf = sin(bD[yb][xb]->fi);
@@ -239,21 +237,33 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z){
 			cosp = cos(bD[yb][xb]->psi);
 			sinp = sin(bD[yb][xb]->psi);
 
-			ix = x - bD[yb][xb]->xc ;
-			jz = z - bD[yb][xb]->zc ;
-			iy = y - bD[yb][xb]->yc ;
+			/* The task is now to determine if a point (x,y) is within  */
+            /* or outside of the cross-section of the disk for a given  */
+			/* fixed z. To do this we need to transform the (x,y,z)     */
+			/* global "entire geometrical model" coordinates into a     */
+			/* local axial-symmetric coordinate systems for which we    */
+			/* know the equation of the disk.                           */
 
-			/* Transform from spherical coordinates */
-			a1 = ix*(cosp*cosf-cost*sinf*sinp) + iy*(cosp*sinf+cost*cosf*sinp) + jz*sinp*sint;
-			a2 = ix*(-sinp*cosf-cost*sinf*cosp) + iy*(-sinp*sinf+cost*cosf*cosp) + jz*cosp*sint;
-			a3 = ix*(sint*sinf) + iy *(-sint*cosf) + jz*(cost);
+            /* Start with translational motion of the center of the     */
+			/* disk (x,y,z) - (xc,yc,zc)                                */
+			ix = x - bD[yb][xb]->xc;
+			jz = z - bD[yb][xb]->zc;
+			iy = y - bD[yb][xb]->yc;
 
-			abc = a*(a1*a1+a2*a2)+b*(a1*a1+a2*a2)*(a1*a1+a2*a2)+c*a3*a3;
-			if (abc < 1.0) {
+			/* Disk described with Euler angles, apply Euler rotation   */
+			xl = ix*(cosp*cosf-cost*sinf*sinp) + iy*(cosp*sinf+cost*cosf*sinp) + jz*(sinp*sint);
+			yl = ix*(-sinp*cosf-cost*sinf*cosp) + iy*(-sinp*sinf+cost*cosf*cosp) + jz*(cosp*sint);
+			xl = ix*(sint*sinf) + iy *(-sint*cosf) + jz*(cost);
+
+            /* The equation for the biconcave disk can be described as  */
+            /* (x^2+y^2+z^2) + P*(x^2+y^2) + Q*z^2 + R = 0 in cartesian */
+			/* coordinates.                                             */
+			fBiconcaveDisk = a*(xl*xl+yl*yl)+b*(xl*xl+yl*yl)^2+c*zl*zl;
+			if (fBiconcaveDisk < 1.0) {
 				/* The whole layer is translated */
 				dx = bD[yb][xb]->dx;
 				dy = bD[yb][xb]->dy;
-				eps[(x+dx)%xmax][(y+dy)%ymax] = bD[yb][xb]-> amp;
+				eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = bD[yb][xb]-> amp;
 			}
 		}
 	}
@@ -527,21 +537,20 @@ void propagate(sampData *sD, modelData *mD) {
     /* Assign field init values.            */
 	/* Input field:     Re = 1.0 Im = 0.0   */
 	/* Reflected field: Re = 0.0 Im = 0.0   */
-	for (y = 0; y < sD->yAnt; y++) 
+	for (y=0; y<sD->yAnt; y++)
 	{
-		for (x = 0; x < 2*sD->xAnt; x+=2) 
+		for (x=0; x<2*sD->xAnt; x+=2)
 		{
 			umig[y][x] =   1.0;
 			umig[y][x+1] = 0.0;
-			uref[y][x]   = 0;
-			uref[y][x+1] = 0;
+			uref[y][x]   = 0.0;
+			uref[y][x+1] = 0.0;
 		}
 	}
 
 	/* Start propagate from z=0 to z=(sD->zAnt-2) */
-	for (z = 0; z < (sD->zAnt - 1) ; z++) 
+	for (z=0; z<(sD->zAnt - 1); z++)
 	{
-		
 		/* Fill two layers in xy-plane with sample points */ 
 		fill2DLayer(sD, bD[z/sD->zbox], sampleLayer1, z);
 		fill2DLayer(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
