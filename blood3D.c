@@ -21,13 +21,20 @@
 #define FIELD_MAX_REAL 100000
 #define FIELD_MAX_IM 100000
 
-typedef struct bloodData{
+/* Choose angle setup for different simulations */
+#define ANGLES_RANDOM         1
+#define ANGLE_THETA_ZERO      0
+#define ANGLE_THETA_PI_HALF   0
+#define ANGLE_THETA_PI_FOURTH 0
+
+typedef struct
+{
 	int amp, xc, yc, zc, dx, dy;
 	double theta, fi, psi;
 } bloodData;
 
-
-typedef struct sampData{
+typedef struct 
+{
 	int xAnt, yAnt, zAnt, iAnt, xout, zout;
 	double dx, dy, dz, fraction;
 	int xbox, ybox, zbox;
@@ -35,7 +42,8 @@ typedef struct sampData{
 
 
 /* Describes medium */
-typedef struct modelData{
+typedef struct
+{
 	double afreq; /* angular frequency */
 	double epsilonRe, epsilonIm; /* inclusion permittivity */
 	double backRe, backIm; /* backgound permittivity */
@@ -44,14 +52,16 @@ typedef struct modelData{
 
 /* output of structures ************************************/
 
-void printfsampData(sampData *sD){
+void printfsampData(sampData *sD)
+{
 printf("Discretization data\n");
 printf("xAnt = %d\t, yAnt = %d\t, zAnt = %d\n",sD->xAnt, sD->yAnt, sD->zAnt);
 printf("dx = %.4f\t, dy = %.4f\t, dz = %.4f\n\n",sD->dx, sD->dy, sD->dz);
 }
 
 
-void fprintfsampData(FILE *fp, sampData *sD){
+void fprintfsampData(FILE *fp, sampData *sD)
+{
 	fprintf(fp, "Discretization data\n");
 	fprintf(fp, "xAnt = %d\t, yAnt = %d\t, zAnt = %d\n",
 	sD->xAnt, sD->yAnt, sD->zAnt);
@@ -60,7 +70,8 @@ void fprintfsampData(FILE *fp, sampData *sD){
 }
 
 
-void printfmodelData(modelData *mD){
+void printfmodelData(modelData *mD)
+{
 	printf("Modelling data\n");
 	printf("angular frequency = %.4f\n", mD->afreq);
 	printf("inclusion = %.4f-i %.4f\n", mD->epsilonRe, mD->epsilonIm);
@@ -68,13 +79,13 @@ void printfmodelData(modelData *mD){
 }
 
 
-void fprintfmodelData(FILE *fp, modelData *mD){
+void fprintfmodelData(FILE *fp, modelData *mD)
+{
 	fprintf(fp, "Modelling data\n");
 	fprintf(fp, "angular frequency = %.4f\n", mD->afreq);
 	fprintf(fp, "inclusion = %.4f-i %.4f\n", mD->epsilonRe, mD->epsilonIm);
 	fprintf(fp, "backgroud = %.4f-i %.4f\n", mD->backRe, mD->backIm);
 }
-
 
 /* some complex valued algebra *****************************/
 void compsqrt(double a, double b, double *c, double *d)
@@ -83,16 +94,9 @@ void compsqrt(double a, double b, double *c, double *d)
 	*c = sqrt((*d + a)/2.0);
 	*d = sqrt((*d -a )/2.0);
 	*d = (b < 0) ? -*d : *d;
-
-	/* Assert if out of boundaries */
-	assert(sizeof(*d) == sizeof(double));
-	assert(sizeof(*c) == sizeof(double));
-
 }
 
-
-void compmult(double ar, double ai, double br, double bi, double *cr,
-double *ci)
+void compmult(double ar, double ai, double br, double bi, double *cr, double *ci)
 {
 	*cr = ar*br - ai*bi;
 	*ci = ar*bi + ai*br;
@@ -102,36 +106,26 @@ double *ci)
 	assert(sizeof(*ci) == sizeof(double));
 }
 
-
-void compdiv(double ar, double ai, double br, double bi, double *cr, double
-*ci)
+void compdiv(double ar, double ai, double br, double bi, double *cr, double *ci)
 {
 	*ci = br*br + bi*bi;
 	*cr = (ar*br + ai*bi)/(*ci);
 	*ci = (br*ai - bi*ar)/(*ci);
-
-	/* Assert if out of boundaries */
-	assert(sizeof(*cr) == sizeof(double));
-	assert(sizeof(*ci) == sizeof(double));
 }
-
 
 double compabs(double ar, double ai)
 {
 	return sqrt(ar*ar + ai*ai);
 }
 
-
 double absolut(double a)
 {
 	return (a < 0) ? -a : a;
 }
 
-
 double random1(double a){
 	return a*rand()/(1.0*RAND_MAX);
 }
-
 
 /* 
  * Memoryallocation of bloodData 3D array
@@ -160,40 +154,60 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
 	int nbrOfXbox, nbrOfYbox, nbrOfZbox;
 	int zb, xb, yb;
 
+    /* Calculate number of cells. E.g if we use 1024 sample points    */
+	/* and each cell is 128 points we get 1024/128 = 8 cells          */
 	nbrOfXbox = sD->xAnt/sD->xbox;
 	nbrOfZbox = sD->zAnt/sD->zbox;
 	nbrOfYbox = sD->yAnt/sD->ybox;
 
-	for (xb = 0; xb < nbrOfXbox; xb++){
-		for (yb = 0; yb < nbrOfYbox; yb++){
-			for (zb = 0; zb < nbrOfZbox; zb++) {
-				bD[zb][yb][xb]->zc = (zb+1)*sD->zbox-sD->zbox/2;
-				bD[zb][yb][xb]->xc = (xb+1)*sD->xbox-sD->xbox/2;
-				bD[zb][yb][xb]->yc = (yb+1)*sD->ybox-sD->ybox/2;
+	for (zb = 0; zb < nbrOfZbox; zb++)
+	{
+		/* Displace centers of whole xy-plane layer */
+		/* to create randomness in geometry.        */
+		bD[zb][yb][xb]->dx = (int)random1(sD->xbox);
+		bD[zb][yb][xb]->dy = (int)random1(sD->ybox);
 
-                /* Displace centers of whole layer in x-y */
-				/* to create randomness in geometry.      */
-				bD[zb][yb][xb]->dx = (int)random1(sD->zbox);
-				bD[zb][yb][xb]->dy = (int)random1(sD->zbox);
+		for (yb = 0; yb < nbrOfYbox; yb++)
+		{
+			for (xb = 0; xb < nbrOfXbox; xb++)
+			{
+				bD[zb][yb][xb]->zc = (zb+0.5)*sD->zbox;
+				bD[zb][yb][xb]->xc = (xb+0.5)*sD->xbox;
+				bD[zb][yb][xb]->yc = (yb+0.5)*sD->ybox;
+				bD[zb][yb][xb]->amp = 1;
+
+				/* E.g. if we have 1024 samplepoints and choose 128 size cells        */
+				/* we get 8 cells having centers (0+0.5)*128 = 64, (1+0.5)*128 = 192, */
+				/* (2+0.5)* 128 = 320, ... (7+0.5)*128 = 960                          */
+
+                /* Assign values for the angles */
+#ifdef (ANGLES_RANDOM == 1)
 				bD[zb][yb][xb]->theta = random1(2*pi);
 				bD[zb][yb][xb]->fi = random1(2*pi);
 				bD[zb][yb][xb]->psi = random1(2*pi);
-				bD[zb][yb][xb]->amp = 1;
+#endif
 
-			}
-		}
-	}
-	
-	for (zb=0; zb<nbrOfZbox; zb++){
-		for (yb=0; yb<nbrOfYbox; yb++){
-			for (xb=0; xb<nbrOfXbox; xb++) {
-				bD[zb][yb][xb]->fi, bD[zb][yb][xb]->psi, bD[zb][yb][xb]->xc, bD[zb][yb][xb]->yc,
-				bD[zb][yb][xb]->zc);
+#ifdef (ANGLE_THETA_ZERO == 1)
+                bD[zb][yb][xb]->theta = 0;
+				bD[zb][yb][xb]->fi = random1(2*pi);
+				bD[zb][yb][xb]->psi = random1(2*pi);
+#endif
+
+#ifdef (ANGLE_THETA_PI_HALF == 1)
+                bD[zb][yb][xb]->theta = pi/2;
+				bD[zb][yb][xb]->fi = random1(2*pi);
+				bD[zb][yb][xb]->psi = random1(2*pi);
+#endif
+
+#ifdef (ANGLE_THETA_PI_FOURTH == 1)
+                bD[zb][yb][xb]->theta = pi/4;
+				bD[zb][yb][xb]->fi = random1(2*pi);
+				bD[zb][yb][xb]->psi = random1(2*pi);
+#endif
 			}
 		}
 	}
 }
-
 
 /* 
 * Fill 2D geometry layer fox fixed z 
@@ -236,6 +250,7 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z){
 
 			abc = a*(a1*a1+a2*a2)+b*(a1*a1+a2*a2)*(a1*a1+a2*a2)+c*a3*a3;
 			if (abc < 1.0) {
+				/* The whole layer is translated */
 				dx = bD[yb][xb]->dx;
 				dy = bD[yb][xb]->dy;
 				eps[(x+dx)%xmax][(y+dy)%ymax] = bD[yb][xb]-> amp;
@@ -509,6 +524,7 @@ void propagate(sampData *sD, modelData *mD) {
 	/* Initialize the 3D grid, blood cell centers only */
 	initBloodData3DArray( sD, bD );
 
+    /* Assign field init values.            */
 	/* Input field:     Re = 1.0 Im = 0.0   */
 	/* Reflected field: Re = 0.0 Im = 0.0   */
 	for (y = 0; y < sD->yAnt; y++) 
@@ -537,6 +553,7 @@ void propagate(sampData *sD, modelData *mD) {
 		interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
 
 		/* Calculate power in z by summing over x-y plane */
+		/* (uRe^2+uIm^2) * (1+epsilon[y][x/2]) */  /* TODO: Why x/2 ??? */
 		powerTransmitted = 0.0;
 		for ( y = 0; y < sD->yAnt; y++) 
 		{
