@@ -216,7 +216,7 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
 void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 {
 	int x, y, zb, xb, dx, dy, yb, ix, jz, iy;
-	double P, Q, R, fBiconcaveDisk;
+	double C0, C2, C4, R0, D_xDiff;
 	double cost, sint, sinf, cosf, sinp, cosp;
 
     /* Iterate over the whole xy-plane */
@@ -264,15 +264,38 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 			/* and Euler rotation (since we decided to describe the    */
 			/* object with Euler angles).                              */
 
-            /* The equation for the biconcave disk can be described as  */
-            /* (x^2+y^2+z^2) + P*(x^2+y^2) + Q*z^2 + R = 0 in cartesian */
-			/* coordinates.                                             */
-			fBiconcaveDisk = a*(xl*xl+yl*yl)+b*(xl*xl+yl*yl)^2+c*zl^2;
-			if (fBiconcaveDisk < 1.0) {
-				/* The whole layer is translated */
-				dx = bD[yb][xb]->dx;
-				dy = bD[yb][xb]->dy;
-				eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = bD[yb][xb]-> amp;
+            /************ BICONCAVE DISK / BLOODCELL APPROACH **********/
+
+            /* Suggestion by A.Karlsson "Numerical Simulations of Light Scattering          */
+			/* by Red Blood Cells" the equation for the biconcave disk can be               */
+			/* described as: D(x) = Sqrt(1-(x/R0)^2) * (C0+C2*(x/R0)^2+C4*(x/R0)^4))        */
+			/* where C0=0.81um, C2=7.83um, C4=-4.39um and R0=3.91um and this corresponds    */
+			/* to a biconcave disk with diameter a=7.76um and max thickness b=2.55um.       */
+			/* Thus, the a=7.76um shall correspond to sD->xbox samplepoints.                */
+			/* We apply the following tranformations: x -> Sqrt(x^2+y^2) and for D(x)       */
+			/* we set D(x)^2 -> (2z)^2 = 4*z^2. This give a 3D expression and we can use    */
+			/* 4*z^2 - (1-(x/R0)^2) * (C0+C2*(x/R0)^2+C4*(x/R0)^4))^2 < 0 to and that       */
+			/* sqrt(xl^2+yl^2) < half cell size yo determine if (x,y) is within the disk or */
+			/* not.                                                                         */
+			R0 = 64.4948;
+			C0 = 13.3608;
+			C2 = 129.1546;
+			C4 = -72.41243;
+			D_xDiff = 4*zl^2 - (1-((xl^2+yl^2)/R0^2)) * (C0 + C2*(xl^2+yl^2)/R0^2 + C4 * ((xl^2+yl^2)^2)/R0^4);
+
+			/* The whole xy-layer shall be translated */
+			dx = bD[yb][xb]->dx;
+			dy = bD[yb][xb]->dy;
+
+            R = sqrt(xl^2 + yl^2);
+			/* Check if (xl,yl) is within disk */
+			if ( (D_xDiff < 0.0) && (R < sD->xbox/2) ) 
+			{
+				eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 1;
+			}
+			else
+			{
+				eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
 			}
 		}
 	}
