@@ -1,4 +1,4 @@
-/* Bo-G�ran Wallner */
+/* Bo-Göran Wallner */
 
 #include <stdio.h>
 #include <math.h>
@@ -250,15 +250,24 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 			jz = z - bD[yb][xb]->zc;
 			iy = y - bD[yb][xb]->yc;
 
-			/* Disk described with Euler angles, apply Euler rotation   */
+			/* We are now at disk origo. Apply Euler rotation to rotate */
+			/* coordinate system into the correct angles and describe   */
+			/* the disk in local coordinates (xl,yl,zl).                */ 
 			xl = ix*(cosp*cosf-cost*sinf*sinp) + iy*(cosp*sinf+cost*cosf*sinp) + jz*(sinp*sint);
 			yl = ix*(-sinp*cosf-cost*sinf*cosp) + iy*(-sinp*sinf+cost*cosf*cosp) + jz*(cosp*sint);
-			xl = ix*(sint*sinf) + iy *(-sint*cosf) + jz*(cost);
+			zl = ix*(sint*sinf) + iy *(-sint*cosf) + jz*(cost);
+
+            /* So far we have not assumed anything about the exact     */
+			/* geometry. We have barely stated, we have any object     */
+			/* shape in (x,y,z) and translate this object into a       */
+			/* local coordinate system (xl,yl,zl) by translation       */
+			/* and Euler rotation (since we decided to describe the    */
+			/* object with Euler angles).                              */
 
             /* The equation for the biconcave disk can be described as  */
             /* (x^2+y^2+z^2) + P*(x^2+y^2) + Q*z^2 + R = 0 in cartesian */
 			/* coordinates.                                             */
-			fBiconcaveDisk = a*(xl*xl+yl*yl)+b*(xl*xl+yl*yl)^2+c*zl*zl;
+			fBiconcaveDisk = a*(xl*xl+yl*yl)+b*(xl*xl+yl*yl)^2+c*zl^2;
 			if (fBiconcaveDisk < 1.0) {
 				/* The whole layer is translated */
 				dx = bD[yb][xb]->dx;
