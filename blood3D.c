@@ -213,7 +213,7 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
 * Fill 2D geometry layer fox fixed z 
 */
 
-void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
+static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, int z)
 {
 	/* Coordinates in global coordinate system */
 	int x, y, zb, xb, dx, dy, yb;
@@ -297,26 +297,28 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 			dx = bD[yb][xb]->dx;
 			dy = bD[yb][xb]->dy;
 
-			/* Check if (xe,ye) is within disk */
+			/* Check if (xe,ye) is within disk since expression only valid within */
+			/* it and that exclude e.g. corners of the cell.                      */
 			if(Re < sD->xbox/2)
 			{
+				/* Re is valid to use in the expression */
 				D_xDiff = ze^2 - (1-(Re/R0)^2) * (C0 + C2*(Re/R0)^2 + C4 * (Re/R0)^4)^2;
 				/* Check if ze is outside or within the biconcave disk */
 				if ( D_xDiff > 0.0)
 				{
 					/* ze is outside the disk */
-					eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
+					geometry2D[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
 				}
 				else
 				{
 					/* ze is within the biconcave disk */
-					eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 1;
+					geometry2D[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 1;
 				}
 			}
 			else
 			{
 				/* Re is outside the disk */
-				eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
+				geometry2D[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
 			}
 		}
 	}
@@ -605,8 +607,8 @@ void propagate(sampData *sD, modelData *mD) {
 	for (z=0; z<(sD->zAnt - 1); z++)
 	{
 		/* Fill two layers in xy-plane with sample points */ 
-		fill2DLayer(sD, bD[z/sD->zbox], sampleLayer1, z);
-		fill2DLayer(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
+		create2DGeometry(sD, bD[z/sD->zbox], sampleLayer1, z);
+		create2DGeometry(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
 
 		/* Migrate between the two layers */
 		migrate(sD, mD, sampleLayer1, umig);
