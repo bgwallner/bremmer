@@ -280,11 +280,12 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 			/* where C0=0.81um, C2=7.83um, C4=-4.39um and R0=3.91um and this corresponds    */
 			/* to a biconcave disk with diameter a=7.76um and max thickness b=2.55um.       */
 			/* Thus, the a=7.76um shall correspond to sD->xbox samplepoints.                */
-			/* We apply the following tranformations: x -> Sqrt(x^2+y^2) and for D(x)       */
-			/* we set D(x)^2 -> (2z)^2 = 4*z^2. This give a 3D expression and we can use    */
-			/* 4*z^2 - 4*(1-(x/R0)^2) * (C0+C2*(x/R0)^2+C4*(x/R0)^4))^2 < 0 and that        */
-			/* sqrt(xe^2+ye^2) < half cell size to determine if (x,y) is within the disk or */
-			/* not.                                                                         */
+			/* We apply the following tranformations: x -> Sqrt(xe^2+ye^2) and for D(x)     */
+			/* we set D(x)^2 -> (2ze)^2 = 4*ze^2. This give a 3D expression and we can use  */
+			/* 4*ze^2 - 4*(1-(Re/R0)^2) * (C0+C2*(Re/R0)^2+C4*(Re/R0)^4))^2 > 0 and if      */
+			/* this expression holds then the ze is *not* within the biconcave disk.        */
+			/* Also Re=sqrt(xe^2+ye^2) < half cell size to determine if (xe,ye) is within   */
+			/* the disk or not.                                                             */
 			R0 = 64.4948;
 			C0 = 13.3608;
 			C2 = 129.1546;
@@ -300,18 +301,21 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 			if(Re < sD->xbox/2)
 			{
 				D_xDiff = ze^2 - (1-(Re/R0)^2) * (C0 + C2*(Re/R0)^2 + C4 * (Re/R0)^4)^2;
-
-				if ( (D_xDiff < 0.0) && () )
+				/* Check if ze is outside or within the biconcave disk */
+				if ( D_xDiff > 0.0)
 				{
-					eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 1;
+					/* ze is outside the disk */
+					eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
 				}
 				else
 				{
-					eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
+					/* ze is within the biconcave disk */
+					eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 1;
 				}
 			}
 			else
 			{
+				/* Re is outside the disk */
 				eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
 			}
 		}
