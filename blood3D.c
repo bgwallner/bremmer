@@ -215,8 +215,15 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
 
 void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 {
-	int x, y, zb, xb, dx, dy, yb, ix, jz, iy;
+	/* Coordinates in global coordinate system */
+	int x, y, zb, xb, dx, dy, yb;
+	/* Coordinates in local cell with disk in origo, e.g. xl = f(x,y,z) */
+	int xl, yl, zl;
+	/* Coordinates in Euler rotated system, e.g. xe = f(xl,yl,zl)       */
+	int xe, ye, ze, Re;
+    /* Blood-cell constants */
 	double C0, C2, C4, R0, D_xDiff;
+	/* Trigonometric values */
 	double cost, sint, sinf, cosf, sinp, cosp;
 
     /* Iterate over the whole xy-plane */
@@ -244,23 +251,24 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 			/* local axial-symmetric coordinate systems for which we    */
 			/* know the equation of the disk.                           */
 
-            /* Start with translational motion of the center of the     */
-			/* disk (x,y,z) - (xc,yc,zc)                                */
-			ix = x - bD[yb][xb]->xc;
-			jz = z - bD[yb][xb]->zc;
-			iy = y - bD[yb][xb]->yc;
+            /* Start with transformation from global to local coordinate */
+			/* system of the center of the disk in the cell (xc, yc) by  */
+			/* (xl,yl,zl) = (x,y,z) - (xc,yc,zc)                         */
+			xl = x - bD[yb][xb]->xc;
+			yl = y - bD[yb][xb]->yc;
+			zl = z - bD[yb][xb]->zc;
 
 			/* We are now at disk origo. Apply Euler rotation to rotate */
 			/* coordinate system into the correct angles and describe   */
-			/* the disk in local coordinates (xl,yl,zl).                */ 
-			xl = ix*(cosp*cosf-cost*sinf*sinp) + iy*(cosp*sinf+cost*cosf*sinp) + jz*(sinp*sint);
-			yl = ix*(-sinp*cosf-cost*sinf*cosp) + iy*(-sinp*sinf+cost*cosf*cosp) + jz*(cosp*sint);
-			zl = ix*(sint*sinf) + iy *(-sint*cosf) + jz*(cost);
+			/* the disk in local coordinates (xe,ye,ze).                */ 
+			xe = xl*(cosp*cosf-cost*sinf*sinp) + yl*(cosp*sinf+cost*cosf*sinp) + zl*(sinp*sint);
+			ye = xl*(-sinp*cosf-cost*sinf*cosp) + yl*(-sinp*sinf+cost*cosf*cosp) + zl*(cosp*sint);
+			ze = xl*(sint*sinf) + yl *(-sint*cosf) + zl*(cost);
 
             /* So far we have not assumed anything about the exact     */
 			/* geometry. We have barely stated, we have any object     */
 			/* shape in (x,y,z) and translate this object into a       */
-			/* local coordinate system (xl,yl,zl) by translation       */
+			/* local coordinate system (xe,ye,ze) by translation       */
 			/* and Euler rotation (since we decided to describe the    */
 			/* object with Euler angles).                              */
 
@@ -275,23 +283,32 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 			/* We apply the following tranformations: x -> Sqrt(x^2+y^2) and for D(x)       */
 			/* we set D(x)^2 -> (2z)^2 = 4*z^2. This give a 3D expression and we can use    */
 			/* 4*z^2 - (1-(x/R0)^2) * (C0+C2*(x/R0)^2+C4*(x/R0)^4))^2 < 0 to and that       */
-			/* sqrt(xl^2+yl^2) < half cell size yo determine if (x,y) is within the disk or */
+			/* sqrt(xe^2+ye^2) < half cell size yo determine if (x,y) is within the disk or */
 			/* not.                                                                         */
 			R0 = 64.4948;
 			C0 = 13.3608;
 			C2 = 129.1546;
 			C4 = -72.41243;
-			D_xDiff = 4*zl^2 - (1-((xl^2+yl^2)/R0^2)) * (C0 + C2*(xl^2+yl^2)/R0^2 + C4 * ((xl^2+yl^2)^2)/R0^4);
+            /* Calculate (xe,ye) corresponding radius */
+			Re = sqrt(xe^2 + ye^2);
 
 			/* The whole xy-layer shall be translated */
 			dx = bD[yb][xb]->dx;
 			dy = bD[yb][xb]->dy;
 
-            R = sqrt(xl^2 + yl^2);
-			/* Check if (xl,yl) is within disk */
-			if ( (D_xDiff < 0.0) && (R < sD->xbox/2) ) 
+			/* Check if (xe,ye) is within disk */
+			if(Re < sD->xbox/2)
 			{
-				eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 1;
+				D_xDiff = 4*ze^2 - (1-(Re/R0)^2) * (C0 + C2*(Re/R0)^2 + C4 * (Re/R0)^4);
+
+				if ( (D_xDiff < 0.0) && () )
+				{
+					eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 1;
+				}
+				else
+				{
+					eps[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
+				}
 			}
 			else
 			{
