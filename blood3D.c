@@ -282,8 +282,8 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 			/* Thus, the a=7.76um shall correspond to sD->xbox samplepoints.                */
 			/* We apply the following tranformations: x -> Sqrt(x^2+y^2) and for D(x)       */
 			/* we set D(x)^2 -> (2z)^2 = 4*z^2. This give a 3D expression and we can use    */
-			/* 4*z^2 - (1-(x/R0)^2) * (C0+C2*(x/R0)^2+C4*(x/R0)^4))^2 < 0 to and that       */
-			/* sqrt(xe^2+ye^2) < half cell size yo determine if (x,y) is within the disk or */
+			/* 4*z^2 - 4*(1-(x/R0)^2) * (C0+C2*(x/R0)^2+C4*(x/R0)^4))^2 < 0 and that        */
+			/* sqrt(xe^2+ye^2) < half cell size to determine if (x,y) is within the disk or */
 			/* not.                                                                         */
 			R0 = 64.4948;
 			C0 = 13.3608;
@@ -299,7 +299,7 @@ void fill2DLayer(sampData *sD, bloodData ***bD, MatInt& eps, int z)
 			/* Check if (xe,ye) is within disk */
 			if(Re < sD->xbox/2)
 			{
-				D_xDiff = 4*ze^2 - (1-(Re/R0)^2) * (C0 + C2*(Re/R0)^2 + C4 * (Re/R0)^4);
+				D_xDiff = ze^2 - (1-(Re/R0)^2) * (C0 + C2*(Re/R0)^2 + C4 * (Re/R0)^4)^2;
 
 				if ( (D_xDiff < 0.0) && () )
 				{
