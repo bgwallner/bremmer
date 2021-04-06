@@ -359,7 +359,7 @@ void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
 	}
 
 	for (i=0; i<imax; i++) 
-	{ /*interpolation slowness */
+	{   /*interpolation slowness */
 		s = smin + i*(smax-smin)/(imax-1); /* slowness */
 		epsr = 1.0454 + s*mD->epsilonRe; /* Re permittivity */
 		epsi = s*mD->epsilonIm; /* Im permittivity*/
@@ -663,10 +663,13 @@ int main(int argc, char* argv[])
 		
 		
 	/* Field data */
-	mD.afreq = 0.1;        /* frequency    */
-	mD.epsilonRe = 1.94;   /* permittivity */
-	mD.epsilonIm = 0.0002; /* permittivity */
-	mD.backRe = 1.81;
+	/* RBC max size 7.76 um is equivalent to sD.xbox */
+	/* lambda = 632.8 nm = (sD.xbox/7.76)*0.6328 s.p */
+	lambda = (sD.xbox/7.76)*0.6328; /* Sample points */
+	mD.afreq = 2*Pi/lambda;          /* angular frequency c^{-1} s^{-1} */
+	mD.epsilonRe = 1.977;            /* permittivity */
+	mD.epsilonIm = 0.0002;           /* permittivity */
+	mD.backRe = 1.809;
 	mD.backIm = 0.0;
 
 	/* Model contains 2D layer with ALL samplepoints */
