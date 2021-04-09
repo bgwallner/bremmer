@@ -7,10 +7,12 @@ void ddfourn(MatDoub& u1, int xmax, int ymax) {
 
 	int j, y, x;
     int a = 0;
-    
     int len = 2*xmax*ymax;
-    VecDoub v1(len, a);
     
+	/* Create a Vector with double */
+	VecDoub v1(len, a);
+    
+	/* Input to NR fourn() */
     VecInt nn(3);
     nn[0]=ymax;
     nn[1]=xmax;

@@ -335,20 +335,15 @@ void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
 	double epsr, epsi, ga2r, ga2i, gar, gai, kr, ki, k2r;
 	int x, i, y, pr=0, ev=0;
 
-	vector<MatDoub> v1(2);
-	for (Int i=0; i<2;i++) v1[i].resize(ymax, 2*xmax);
+    /* Create sD.iAnt number of vectors */
+	vector<MatDoub> v1(sD.iAnt);
+	for( i=0; i<sD.iAnt;i++ )
+	{
+		/* Resize each vector to contain the field */
+		v1[i].resize(ymax, 2*xmax);
+	}
 
-    /***********/
-//    for (y=0; y<ymax; y++) {
-//        for (x=0; x<2*xmax; x+=2) {
-//            printf("Re(umig(%d %d)) : %f \n", y, x, u1[y][x]);
-//            printf("Im(umig(%d %d)) : %f \n", y, x+1, u1[y][x+1]);
-//        }
-//    }
-    /*************/
-
-	ddfourn(u1, xmax, ymax);
-    
+	/* Smooth out the 2D geometry */
 	for (y=0; y<ymax; y++) 
 	{
 		for (x=0; x<xmax; x++){ /* slowness max and min */
@@ -358,14 +353,17 @@ void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
 		}
 	}
 
-	for (i=0; i<imax; i++) 
+	/* Calculate FFT for the input field */
+	ddfourn(u1, xmax, ymax);
+
+	for (i=0; i<imax; i++)
 	{   /*interpolation slowness */
-		s = smin + i*(smax-smin)/(imax-1); /* slowness */
-		epsr = 1.0454 + s*mD->epsilonRe; /* Re permittivity */
-		epsi = s*mD->epsilonIm; /* Im permittivity*/
-		compmult(eta, w, eta, w, &kr, &ki); /* wave number, c^{-1} s */
-		compmult(kr, ki, epsr, epsi, &k2r, &ga2i); /* sqr wave number, .^{2} */
-		xiX = 0.0; /* zero transverse wave number */
+		s = smin + i*(smax-smin)/(imax-1);           /* slowness */
+		epsr = 1.0454 + s*mD->epsilonRe;             /* Re permittivity */
+		epsi = s*mD->epsilonIm;                      /* Im permittivity*/
+		compmult(eta, w, eta, w, &kr, &ki);          /* wave number, c^{-1} s */
+		compmult(kr, ki, epsr, epsi, &k2r, &ga2i);   /* sqr wave number, .^{2} */
+		xiX = 0.0;                                   /* zero transverse wave number */
 		xiY = 0.0;
         
         /* Must handle y=0 separately since (ymax-y) exist for y>0 and y=0..ymax-1 */
