@@ -8,7 +8,7 @@
 #include <assert.h>
 
 #include "nr3.h"
-#include "transforms.c"
+#include "fourier_wrapper.c"
 #include "memoryallocation2.c"
 
 
