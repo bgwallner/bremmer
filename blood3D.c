@@ -353,7 +353,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     }
 
     /* Calculate FFT for the input field */
-    ddfourn(u1, xmax, ymax);
+    fourn_wrapper( u1, xmax, ymax, false );
 
     eta=0.0;
     for (i=0; i<imax; i++)
@@ -393,7 +393,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
         }
 
         /* Make inverse FFT */
-        ddfourninv(v1[i], xmax, ymax);
+        fourn_wrapper(v1[i], xmax, ymax, true);
 
     } /* interpolation slowness */
 
@@ -468,7 +468,7 @@ static void interaction( sampData *sD, modelData *mD,
         y = 0;
         
         /* Transform in-field */
-        ddfourn(uin, xmax, ymax); /* spatial FFT */
+        fourn_wrapper( uin, xmax, ymax, false ); /* spatial FFT */
         
         /* Set permitivity */
         epsr = 1.0454 + mD->epsilonRe; /* Re permittivity */
@@ -512,8 +512,8 @@ static void interaction( sampData *sD, modelData *mD,
             }
         }
 
-        ddfourninv(urefl, xmax, ymax); /* inverse spatial FFT */
-        ddfourninv(uin, xmax, ymax); /* inverse spatial FFT fix ????? */
+        fourn_wrapper( urefl, xmax, ymax, true ); /* inverse spatial FFT */
+        fourn_wrapper( uin, xmax, ymax, true ); /* inverse spatial FFT fix ????? */
         for (y=0; y<ymax; y++){
             for (x=0; x<xmax; x++){
                 urefl[y][2*x] = refp[y][x]*urefl[y][2*x];
