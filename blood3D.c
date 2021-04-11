@@ -96,14 +96,11 @@ void compsqrt(double a, double b, double *c, double *d)
 	*d = (b < 0) ? -*d : *d;
 }
 
+/* Multiply (ar + i*ai)(br + i*bi) */
 void compmult(double ar, double ai, double br, double bi, double *cr, double *ci)
 {
 	*cr = ar*br - ai*bi;
 	*ci = ar*bi + ai*br;
-
-    /* Assert if out of boundaries */
-	assert(sizeof(*cr) == sizeof(double));
-	assert(sizeof(*ci) == sizeof(double));
 }
 
 void compdiv(double ar, double ai, double br, double bi, double *cr, double *ci)
@@ -329,21 +326,23 @@ void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
 {
 	int xmax=sD->xAnt, zmax=sD->zAnt, imax=sD->iAnt, ymax=sD->yAnt;
 	double dx=sD->dx, dz=sD->dz, dy=sD->dy ;
-	double w=mD->afreq, eta=0.0;
-	double s, xiX, xiY, smin=1000.0, smax=0.0, b, temp, propr, propi;
+	double w=mD->afreq, eta;
+	double s, xiX, xiY, smin, smax, b, temp, propr, propi;
 	double ii;
 	double epsr, epsi, ga2r, ga2i, gar, gai, kr, ki, k2r;
 	int x, i, y, pr=0, ev=0;
 
     /* Create sD.iAnt number of vectors */
 	vector<MatDoub> v1(sD.iAnt);
-	for( i=0; i<sD.iAnt;i++ )
+	for( i=0; i<sD.iAnt; i++ )
 	{
 		/* Resize each vector to contain the field */
 		v1[i].resize(ymax, 2*xmax);
 	}
 
 	/* Smooth out the 2D geometry */
+	smin=1000.0;
+	smax=0.0;
 	for (y=0; y<ymax; y++) 
 	{
 		for (x=0; x<xmax; x++){ /* slowness max and min */
@@ -356,78 +355,37 @@ void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
 	/* Calculate FFT for the input field */
 	ddfourn(u1, xmax, ymax);
 
+    eta=0.0;
 	for (i=0; i<imax; i++)
 	{   /*interpolation slowness */
 		s = smin + i*(smax-smin)/(imax-1);           /* slowness */
-		epsr = 1.0454 + s*mD->epsilonRe;             /* Re permittivity */
+		epsr = s*mD->epsilonRe;                      /* Re permittivity */
 		epsi = s*mD->epsilonIm;                      /* Im permittivity*/
-		compmult(eta, w, eta, w, &kr, &ki);          /* wave number, c^{-1} s */
-		compmult(kr, ki, epsr, epsi, &k2r, &ga2i);   /* sqr wave number, .^{2} */
-		xiX = 0.0;                                   /* zero transverse wave number */
-		xiY = 0.0;
-        
-        /* Must handle y=0 separately since (ymax-y) exist for y>0 and y=0..ymax-1 */
-		y = 0.0;
-		ga2r = k2r + xiX*xiX + xiY*xiY;
-		compsqrt(ga2r, ga2i, &gar, &gai);
-		propr = cos(-dz*gai) * exp(-dz*gar);
-		propi = sin(-dz*gai) * exp(-dz*gar);
-		compmult(propr, propi, u1[y][0], u1[y][1], &v1[i][y][0], &v1[i][y][1]);
-        
-        for (x=2; x<xmax+2; x+=2){
-            /* zero transverse wave number */
-            xiX = x/(xmax*2.0*dx)*twopi;
-            ga2r = k2r + xiX*xiX + xiY*xiY;
-            compsqrt(ga2r, ga2i, &gar, &gai);
-            propr = cos(-dz*gai) * exp(-dz*gar);
-            propi = sin(-dz*gai) * exp(-dz*gar);
-            compmult(propr, propi, u1[y][x], u1[y][x+1], &v1[i][y][x], &v1[i][y][x+1]);
-            compmult(propr, propi, u1[y][2*xmax-x], u1[y][2*xmax-x+1],&v1[i][y][2*xmax-x],
-                     &v1[i][y][2*xmax-x+1]);
-        }
+		compmult(eta, w, eta, w, &kr, &ki);          /* wave number (eta + i*w)^2, c^{-1} s */
+		compmult(kr, ki, epsr, epsi, &k2r, &ga2i);   /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
 
-        /* And now handle y>0 */
-		for (y=1; y<ymax/2-1; y++)
+        /* Iterate over the geometry {ymax * xmax} */
+		for (y=0; y<ymax; y++)
 		{
-			xiX = 0.0; /* zero transverse wave number */
-			xiY = y/(ymax*dy)*twopi;
-			ga2r = k2r + xiX*xiX + xiY*xiY;
-			compsqrt(ga2r, ga2i, &gar, &gai);
-			propr = cos(-dz*gai) * exp(-dz*gar);
-			propi = sin(-dz*gai) * exp(-dz*gar);
-			compmult(propr, propi, u1[y][0], u1[y][1], &v1[i][y][0], &v1[i][y][1]);
-		    compmult(propr, propi, u1[ymax-y][0], u1[ymax-y][1], &v1[i][ymax-y][0],
-			&v1[i][ymax-y][1]);
-			for (x=2; x<xmax+2; x+=2)
+			xiY = y/(ymax*dy)*twopi;                 /* transverse wavenumber */
+			for (x=0; x<xmax; x+=2)
 			{
-				xiX = x/(xmax*2.0*dx)*twopi;
+				xiX = x/(xmax*2.0*dx)*twopi;         /* transverse wavenumber */
 				ga2r = k2r + xiX*xiX + xiY*xiY;
 				compsqrt(ga2r, ga2i, &gar, &gai);
 				propr = cos(-dz*gai) * exp(-dz*gar);
 				propi = sin(-dz*gai) * exp(-dz*gar);
 				compmult(propr, propi, u1[y][x], u1[y][x+1], &v1[i][y][x], &v1[i][y][x+1]);
-				compmult(propr, propi, u1[y][2*xmax-x], u1[y][2*xmax-x+1],
-				&v1[i][y][2*xmax-x], &v1[i][y][2*xmax-x+1]);
-				compmult(propr, propi, u1[ymax-y][x], u1[ymax-y][x+1],
-				&v1[i][ymax-y][x], &v1[i][ymax-y][x+1]);
-				compmult(propr, propi, u1[ymax-y][2*xmax-x], u1[ymax-y][2*xmax-x+1],
-				&v1[i][ymax-y][2*xmax-x],
-				&v1[i][ymax-y][2*xmax-x+1]);
+				compmult(propr, propi, u1[y][2*xmax-x], u1[y][2*xmax-x+1], &v1[i][y][2*xmax-x], &v1[i][y][2*xmax-x+1]);
+				compmult(propr, propi, u1[ymax-y][x], u1[ymax-y][x+1], &v1[i][ymax-y][x], &v1[i][ymax-y][x+1]);
+				compmult(propr, propi, u1[ymax-y][2*xmax-x], u1[ymax-y][2*xmax-x+1], &v1[i][ymax-y][2*xmax-x], &v1[i][ymax-y][2*xmax-x+1]);
 			}
 		}
 
 		/* Make inverse FFT */
 		ddfourninv(v1[i], xmax, ymax);
-					    /***********/
-//    for (y=0; y<ymax; y++) {
-//        for (x=0; x<2*xmax; x+=2) {
-//            printf("Re(umig(%d %d)) : %f \n", y, x, v1[i][y][x]);
-//            printf("Im(umig(%d %d)) : %f \n", y, x+1, v1[i][y][x+1]);
-//        }
-//    }
-    /*************/
-        
-    } /* END for (i=0; i<imax; i++) { /*interpolation slowness */
+
+    } /* interpolation slowness */
 
     if ((smax-smin>0.001) && (imax>1))
     {
@@ -446,16 +404,14 @@ void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
             }
         }
     }
-    else {
+    else 
+	{
         for (y=0; y<ymax; y++) {
             for (x=0; x<2*xmax; x++){ /*interpolation */
                 u1[y][x] = v1[0][y][x];
             }
         }
-    }
-
-	/* Deallocate temp */
-	//multidealloc3(v1, imax, ymax, 2*xmax);	
+    }	
 }
 
 
