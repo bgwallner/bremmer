@@ -9,7 +9,7 @@
 
 #include "nr3.h"
 #include "fourier_wrapper.c"
-#include "memoryallocation2.c"
+//#include "memoryallocation2.c"
 
 
 #define twopi 6.283185307177959
@@ -299,7 +299,7 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             if(Re < sD->xbox/2)
             {
                 /* Re is valid to use in the expression */
-                D_xDiff = ze^2 - (1-(Re/R0)^2) * (C0 + C2*(Re/R0)^2 + C4 * (Re/R0)^4)^2;
+                D_xDiff = pow(ze,2) - (1-pow(Re/R0,2)) * pow(C0 + C2*pow(Re/R0,2) + C4*pow(Re/R0,4), 2);
                 /* Check if ze is outside or within the biconcave disk */
                 if ( D_xDiff > 0.0)
                 {
@@ -333,8 +333,8 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     int x, i, y, pr=0, ev=0;
 
     /* Create sD.iAnt number of vectors */
-    vector<MatDoub> v1(sD.iAnt);
-    for( i=0; i<sD.iAnt; i++ )
+    vector<MatDoub> v1(sD->iAnt);
+    for( i=0; i<sD->iAnt; i++ )
     {
         /* Resize each vector to contain the field */
         v1[i].resize(ymax, 2*xmax);
@@ -343,9 +343,10 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     /* Smooth out the 2D geometry */
     smin=1000.0;
     smax=0.0;
-    for (y=0; y<ymax; y++) 
+    for ( y=0; y<ymax; y++ ) 
     {
-        for (x=0; x<xmax; x++){ /* slowness max and min */
+        for ( x=0; x<xmax; x++ )
+        { /* slowness max and min */
             temp = slow[y][x];
             smax = (smax > temp) ? smax : temp;
             smin = (smin < temp) ? smin : temp;
@@ -356,7 +357,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     fourn_wrapper( u1, xmax, ymax, false );
 
     eta=0.0;
-    for (i=0; i<imax; i++)
+    for ( i=0; i<imax; i++ )
     {   /*interpolation slowness */
         s = smin + i*(smax-smin)/(imax-1);           /* slowness */
         epsr = s*mD->epsilonRe;                      /* Re permittivity */
@@ -365,7 +366,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
         compmult(kr, ki, epsr, epsi, &k2r, &ga2i);   /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
 
         /* Iterate over the geometry {ymax * xmax} */
-        for (y=0; y<ymax; y++)
+        for ( y=0; y<ymax; y++ )
         {
             xiY = y/(ymax*dy)*twopi;                 /* transverse wavenumber */
             for (x=0; x<xmax; x+=2)
@@ -397,16 +398,18 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
 
     } /* interpolation slowness */
 
-    if ( (smax-smin>0.001) && (imax>1) )
+    /* TODO: The following code seems to have to be within i loop. Unless modf() handles it */
+    if ( ((smax-smin)>0.001) && (imax>1) )
     {
         for ( y=0; y<ymax; y++ ) 
         {
-            for ( x=0; x<xmax; x++ ) 
+            for ( x=0; x<(xmax-1); x++ )
             { 
                 /* interpolation */
                 b = modf((slow[y][x]-smin)/(smax-smin)*(imax-1), &ii);
                 i = ii;
-                if ( i<imax-1 ){
+                if ( i<(imax-1) )
+                {
                     u1[y][2*x] = ((1.0-b)*v1[i][y][2*x] + b*v1[i+1][y][2*x]);
                     u1[y][2*x+1] = ((1.0-b)*v1[i][y][2*x+1] + b*v1[i+1][y][2*x+1]);
                 }
@@ -589,7 +592,7 @@ void propagate(sampData *sD, modelData *mD) {
         migrate(sD, mD, sampleLayer1, umig);
         
         /* Calculate interaction between two layers */
-        interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
+        //interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
 
         /* Calculate power in z by summing over x-y plane */
         /* (uRe^2+uIm^2) * (1+epsilon[y][x/2]) */  /* TODO: Why x/2 ??? */
@@ -616,32 +619,33 @@ int main(int argc, char* argv[])
 {
     sampData sD;
     modelData mD;
+    double lambda;
 
     /* Sample points for all model */	
     sD.xAnt = 1024; /* first transverse direction  */
     sD.yAnt = 1024; /* second transverse direction */
     sD.zAnt = 1024; /* depth                       */
-    sD.dx = 0.1;    /* depth step                  */
-    sD.dy = 0.1;
-    sD.dz = 0.1;
+    sD.dx = 1;      /* depth step                  */
+    sD.dy = 1;
+    sD.dz = 1;
         
     
     /* Size of box containing one bloodcell. Let this be 1/8 */
     /* of total number of samplepoints.                      */
-    sD.xbox = sD->xAnt / 8;
-    sD.ybox = sD->xAnt / 8;
-    sD.zbox = sD->xAnt / 8;
+    sD.xbox = sD.xAnt / 8;
+    sD.ybox = sD.yAnt / 8;
+    sD.zbox = sD.zAnt / 8;
 
     sD.zout = 128;
     sD.xout = 128;
-    sD.iAnt=2;
+    sD.iAnt = 4;
         
         
     /* Field data */
     /* RBC max size 7.76 um is equivalent to sD.xbox */
     /* lambda = 632.8 nm = (sD.xbox/7.76)*0.6328 s.p */
-    lambda = (sD.xbox/7.76)*0.6328; /* Sample points */
-    mD.afreq = 2*Pi/lambda;          /* angular frequency c^{-1} s^{-1} */
+    lambda = (sD.xbox/7.76)*0.6328;  /* Sample points */
+    mD.afreq = 2*pi/lambda;          /* angular frequency c^{-1} s^{-1} */
     mD.epsilonRe = 1.977;            /* permittivity */
     mD.epsilonIm = 0.0002;           /* permittivity */
     mD.backRe = 1.809;
@@ -650,7 +654,5 @@ int main(int argc, char* argv[])
     /* Model contains 2D layer with ALL samplepoints */
     propagate( &sD, &mD );
 
-    free(sD);
-    free(mD);
 }
 /**********************************************************/

@@ -2,6 +2,7 @@
 /* MatDoub[][] while fourn() input expect VecDoub[].        */
 
 #include "fourier_ndim.h"
+#include "stdlib.h"
 
 /* Calculate FFT */
 void fourn_wrapper( MatDoub& u1, int xmax, int ymax, bool inverse ) 
@@ -10,7 +11,7 @@ void fourn_wrapper( MatDoub& u1, int xmax, int ymax, bool inverse )
 	int i, y, x;
 
 	/* Create a Vector with double and all zeros */
-	VecDoub v1(2*xmax*ymax, 0);
+	VecDoub v1(2*xmax*ymax, 0.0);
     
 	/* 2D input to NR fourn() */
     VecInt nn(2);
@@ -33,6 +34,7 @@ void fourn_wrapper( MatDoub& u1, int xmax, int ymax, bool inverse )
     {
         /* Call FFT */
         fourn(v1, nn, 1);
+	}
     else
     {
         /* Inverse FFT */
