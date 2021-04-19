@@ -178,25 +178,25 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
                 /* (2+0.5)* 128 = 320, ... (7+0.5)*128 = 960                          */
 
                 /* Assign values for the Euler angles */
-#ifdef (ANGLES_RANDOM == 1)
+#if    (ANGLES_RANDOM == 1)
                 bD[zb][yb][xb]->theta = random1(2*pi);
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
 #endif
 
-#ifdef (ANGLE_THETA_ZERO == 1)
+#if    (ANGLE_THETA_ZERO == 1)
                 bD[zb][yb][xb]->theta = 0;
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
 #endif
 
-#ifdef (ANGLE_THETA_PI_HALF == 1)
+#if    (ANGLE_THETA_PI_HALF == 1)
                 bD[zb][yb][xb]->theta = pi/2;
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
 #endif
 
-#ifdef (ANGLE_THETA_PI_FOURTH == 1)
+#if    (ANGLE_THETA_PI_FOURTH == 1)
                 bD[zb][yb][xb]->theta = pi/4;
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
@@ -444,9 +444,9 @@ static void interaction( sampData *sD, modelData *mD,
     double epsr, epsi, kr, ki, k2r, gar, gai, ga2r, ga2i;
     double bsr, bsi, bkr, bki, bk2r, bgar, bgai, bga2r, bga2i;
     double refr, refi, xiX, xiY;
-    int x, y, **refp, refl=0;
-    
-    refp = multialloc2int(ymax,xmax);
+    int x, y, refl=0;
+
+    MatInt refp(ymax, xmax);
     for (y=0; y<ymax; y++)
     {
         for (x=0; x<xmax; x++)
@@ -534,9 +534,6 @@ static void interaction( sampData *sD, modelData *mD,
             }
         }
     }
-
-    /* Deallocate */
-    multidealloc2int(refp, ymax, xmax);
 }
 
 
