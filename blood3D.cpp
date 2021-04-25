@@ -4,26 +4,42 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <random>
+//#include <time.h>
+#include <ctime>
 #include <assert.h>
 
 #include "nr3.h"
 #include "fourier_ndim.h"
 
-#define twopi 6.283185307177959
-#define pi    3.14159265358
+/* Some constants*/
+#define twopi                  6.283185307177959
+#define pi                     3.14159265358
+#define max32bit               4294967295
 
-#define DEBUG          1
-#define MAX_LIMIT      20000
-#define PRINTOUT       0
-#define FIELD_MAX_REAL 100000
-#define FIELD_MAX_IM   100000
+#define DEBUG                  1
+#define MAX_LIMIT              20000
+#define PRINTOUT               0
+#define FIELD_MAX_REAL         100000
+#define FIELD_MAX_IM           100000
 
-/* Choose angle setup for different simulations */
-#define ANGLES_RANDOM         1
-#define ANGLE_THETA_ZERO      0
-#define ANGLE_THETA_PI_HALF   0
-#define ANGLE_THETA_PI_FOURTH 0
+/* Choose one angle setup for different simulations */
+#define ANGLES_RANDOM          1
+#define ANGLE_THETA_ZERO       0
+#define ANGLE_THETA_PI_HALF    0
+#define ANGLE_THETA_PI_FOURTH  0
+
+/* Some file-handling */
+#define LAYER_NUMBER_TO_FILE           0
+#define MULTIPLE_LAYER_NUMBER_TO_FILE  1
+#define LAYER_NUMBER_TO_PRINT          64
+
+/* File handles */
+static FILE *fpSampleLayer;
+static FILE* fpBloodData;
+
+/* RBC width in sample points */
+static unsigned int bcWidthInSampPoints;
 
 typedef struct
 {
@@ -50,21 +66,24 @@ typedef struct
 
 /* output of structures ************************************/
 
-void printfsampData(sampData *sD)
+/* Function prints one geometry layer to file */
+void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
 {
-printf("Discretization data\n");
-printf("xAnt = %d\t, yAnt = %d\t, zAnt = %d\n",sD->xAnt, sD->yAnt, sD->zAnt);
-printf("dx = %.4f\t, dy = %.4f\t, dz = %.4f\n\n",sD->dx, sD->dy, sD->dz);
-}
+    int x, y;
+    char buf[20];
 
+    snprintf(buf, sizeof(buf), "samplelayer%d.txt", z);
+    fopen_s(&fpSampleLayer, buf, "w");
 
-void fprintfsampData(FILE *fp, sampData *sD)
-{
-    fprintf(fp, "Discretization data\n");
-    fprintf(fp, "xAnt = %d\t, yAnt = %d\t, zAnt = %d\n",
-    sD->xAnt, sD->yAnt, sD->zAnt);
-    fprintf(fp, "dx = %.4f\t, dy = %.4f\t, dz = %.4f\n\n",
-    sD->dx, sD->dy, sD->dz);
+    for (y = 0; y < sD->yAnt; y++)
+    {
+        for (x = 0; x < sD->xAnt; x++)
+        {
+            fprintf(fpSampleLayer, "%d\t", geometry2D[y][x]);
+        }
+        fprintf(fpSampleLayer, "\n");
+    }
+    fclose(fpSampleLayer);
 }
 
 
@@ -118,8 +137,12 @@ double absolut(double a)
     return (a < 0) ? -a : a;
 }
 
-double random1(double a){
-    return a*rand()/(1.0*RAND_MAX);
+double random1(double a)
+{
+    //return a*rand()/(1.0*RAND_MAX);
+    std::random_device dev;
+    std::mt19937 engine(dev());
+    return (a * engine() / (1.0 * 4294967295));
 }
 
 /* Calculate FFT */
@@ -252,7 +275,7 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
 
                 /* Assign values for the Euler angles */
 #if    (ANGLES_RANDOM == 1)
-                bD[zb][yb][xb]->theta = random1(2*pi);
+                bD[zb][yb][xb]->theta = random1(pi);
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
 #endif
@@ -349,7 +372,7 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             /* described as: D(x) = Sqrt(1-(x/R0)^2) * (C0+C2*(x/R0)^2+C4*(x/R0)^4))        */
             /* where C0=0.81um, C2=7.83um, C4=-4.39um and R0=3.91um and this corresponds    */
             /* to a biconcave disk with diameter a=7.76um and max thickness b=2.55um.       */
-            /* Thus, the a=7.76um shall correspond to sD->xbox samplepoints.                */
+            /* Thus, the a=7.76um shall correspond to bcWidthInSampPoints samplepoints.     */
             /* We apply the following tranformations: x -> Sqrt(xe^2+ye^2) and for D(x)     */
             /* we set D(x)^2 -> (2ze)^2 = 4*ze^2. This give a 3D expression and we can use  */
             /* 4*ze^2 - 4*(1-(Re/R0)^2) * (C0+C2*(Re/R0)^2+C4*(Re/R0)^4))^2 > 0 and if      */
@@ -369,7 +392,7 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
 
             /* Check if (xe,ye) is within disk since expression only valid within */
             /* it and that exclude e.g. corners of the cell.                      */
-            if(Re < sD->xbox/2)
+            if(Re < bcWidthInSampPoints/2)
             {
                 /* Re is valid to use in the expression */
                 D_xDiff = pow(ze,2) - (1-pow(Re/R0,2)) * pow(C0 + C2*pow(Re/R0,2) + C4*pow(Re/R0,4), 2);
@@ -392,6 +415,21 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             }
         }
     }
+
+#if (LAYER_NUMBER_TO_FILE == 1)
+    if (LAYER_NUMBER_TO_PRINT == z)
+    {
+        /* Printf layer z to file */
+        fprintfsampData(sD, geometry2D, z);
+    }
+#else if ( MULTIPLE_LAYER_NUMBER_TO_FILE)
+    /* Print layers 0->sD->zbox to files */
+    if (z < sD->zbox)
+    {
+        fprintfsampData(sD, geometry2D, z);
+    }
+#endif
+
 }
 
 /* migrate the fields one layer ****************************************/
@@ -433,11 +471,11 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     eta=0.0;
     for ( i=0; i<imax; i++ )
     {   /*interpolation slowness */
-        s = smin + i*(smax-smin)/(imax-1);           /* slowness */
-        epsr = s*mD->epsilonRe;                      /* Re permittivity */
-        epsi = s*mD->epsilonIm;                      /* Im permittivity*/
-        compmult(eta, w, eta, w, &kr, &ki);          /* wave number (eta + i*w)^2, c^{-1} s */
-        compmult(kr, ki, epsr, epsi, &k2r, &ga2i);   /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
+        s = smin + i*(smax-smin)/(imax-1);                    /* slowness */
+        epsr = mD->backRe + s*(mD->epsilonRe - mD->backRe);   /* Re permittivity, min = mD->back, max = mD->epsilonRe */
+        epsi = s*mD->epsilonIm;                               /* Im permittivity*/
+        compmult(eta, w, eta, w, &kr, &ki);                   /* wave number (eta + i*w)^2, c^{-1} s */
+        compmult(kr, ki, epsr, epsi, &k2r, &ga2i);            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
 
         /* Iterate over the geometry {ymax * xmax} */
         for ( y=0; y<ymax; y++ )
@@ -481,7 +519,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
             { 
                 /* interpolation */
                 b = modf((slow[y][x]-smin)/(smax-smin)*(imax-1), &ii);
-                i = ii;
+                i = (int)ii;
                 if ( i<(imax-1) )
                 {
                     u1[y][2*x] = ((1.0-b)*v1[i][y][2*x] + b*v1[i+1][y][2*x]);
@@ -612,8 +650,8 @@ static void interaction( sampData *sD, modelData *mD,
 
 
 /* main program to propagate the field through the a sequence of layers */
-void propagate(sampData *sD, modelData *mD) {
-
+static void propagate(sampData *sD, modelData *mD) 
+{
     int x, y, z;
     double powerTransmitted;
 
@@ -709,18 +747,25 @@ int main(void)
 
     sD.zout = 128;
     sD.xout = 128;
-    sD.iAnt = 4;
+    sD.iAnt = 2;
         
         
     /* Field data */
-    /* RBC max size 7.76 um is equivalent to sD.xbox */
-    /* lambda = 632.8 nm = (sD.xbox/7.76)*0.6328 s.p */
-    lambda = (sD.xbox/7.76)*0.6328;  /* Sample points */
-    mD.afreq = 2*pi/lambda;          /* angular frequency c^{-1} s^{-1} */
-    mD.epsilonRe = 1.977;            /* permittivity */
-    mD.epsilonIm = 0.0002;           /* permittivity */
+
+    /* RBC max size 7.76 um is equivalent to bcWidthInSampPoints */
+    /* lambda = 632.8 nm = (sD.xbox/7.76)*0.6328 s.p             */
+
+    bcWidthInSampPoints = sD.xbox - 4;           /* To avoid RBCs sticking together */
+    lambda = (bcWidthInSampPoints/7.76)*0.6328;  /* Sample points */
+    mD.afreq = 2*pi/lambda;                      /* angular frequency c^{-1} s^{-1} */
+    mD.epsilonRe = 1.977;                        /* permittivity */
+    mD.epsilonIm = 0.0002;                       /* permittivity */
     mD.backRe = 1.809;
     mD.backIm = 0.0;
+
+    /* Start random number generator */
+    //srand(time(0));
+    std::srand(time(0));
 
     /* Model contains 2D layer with ALL samplepoints */
     propagate( &sD, &mD );
