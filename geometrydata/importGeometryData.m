@@ -16,13 +16,13 @@ sample3D = zeros(1024,1024);
 video = VideoWriter('peaks.avi');
 open(video);
 
-NbrOfFrames = 127;
+NbrOfFrames = 128;
 M(NbrOfFrames) = struct('cdata',[],'colormap',[]);
 for j = 1:NbrOfFrames
     fprintf('Geometry layer:%d\n', j);
     %% Initialize variables
     fileBase = 'C:\github\bremmer\geometrydata\samplelayer';
-    fileNumber = string(j);
+    fileNumber = string(j-1);
     fileType = '.txt';
     filename = strcat(fileBase, fileNumber, fileType);
     delimiter = '\t';
@@ -70,8 +70,8 @@ close(video);
 figure;
 [x,y,z] = meshgrid(1:1024,1:1024,1:127);
 yslice = [];
-xslice = [];
-zslice = [8 32 40 72 104 120];
+xslice = [320 576 832];
+zslice = [8 40 72 104];
 h = slice(sample3D,xslice,yslice,zslice);
 set(h,'EdgeColor','none');
 

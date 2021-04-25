@@ -142,7 +142,8 @@ double random1(double a)
     //return a*rand()/(1.0*RAND_MAX);
     std::random_device dev;
     std::mt19937 engine(dev());
-    return (a * engine() / (1.0 * 4294967295));
+    std::uniform_real_distribution<double> dist{ 0.0, 1.0 };
+    return (a * dist(engine));
 }
 
 /* Calculate FFT */
@@ -253,13 +254,14 @@ void initBloodData3DArray(sampData *sD, bloodData ****bD)
 
     for (zb = 0; zb < nbrOfZbox; zb++)
     {
-        /* Displace centers of whole xy-plane layer */
-        /* to create randomness in geometry.        */
-        dx = (int)random1(sD->xbox);
-        dy = (int)random1(sD->ybox);
+        /* Displace centers of whole xy-plane layer         */
+        /* in y-direction to create randomness in geometry. */
+        dy = (int)random1((double)sD->ybox);
 
         for (yb = 0; yb < nbrOfYbox; yb++)
         {
+            /* For every fix yb translate in x-direction */
+            dx = (int)random1((double)sD->xbox);
             for (xb = 0; xb < nbrOfXbox; xb++)
             {
                 bD[zb][yb][xb]->dx = dx;
@@ -543,7 +545,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
                 u1[y][x] = v1[0][y][x];
             }
         }
-    }	
+    }
 }
 
 static void interaction( sampData *sD, modelData *mD,
@@ -681,7 +683,8 @@ static void propagate(sampData *sD, modelData *mD)
     /* Reflected field: Re = 0.0 Im = 0.0   */
     for (y=0; y<sD->yAnt; y++)
     {
-        for (x=0; x<2*sD->xAnt; x+=2)
+        /* E.g. sD->xAnt = 1024 s.p. x < 2047 -> 0, 2, ..., 2046 */
+        for (x=0; x<(2*sD->xAnt-1); x+=2)
         {
             umig[y][x] =   1.0;
             umig[y][x+1] = 0.0;
@@ -691,27 +694,28 @@ static void propagate(sampData *sD, modelData *mD)
     }
 
     /* Start propagate from z=0 to z=(sD->zAnt-2) */
-    for (z=0; z<(sD->zAnt - 1); z++)
+    for (z=0; z<(sD->zAnt-1); z++)
     {
         /* Fill two layers in xy-plane with sample points */ 
         create2DGeometry(sD, bD[z/sD->zbox], sampleLayer1, z);
         create2DGeometry(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
 
         /* Migrate between the two layers */
-        migrate(sD, mD, sampleLayer1, umig);
+        //migrate(sD, mD, sampleLayer1, umig);
         
         /* Calculate interaction between two layers */
         //interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
 
         /* Calculate power in z by summing over x-y plane */
-        /* (uRe^2+uIm^2) * (1+epsilon[y][x/2]) */  /* TODO: Why x/2 ??? */
+        /* (uRe^2+uIm^2) * (1+epsilon[y][x/2]) */
         powerTransmitted = 0.0;
-        for ( y = 0; y < sD->yAnt; y++) 
+        for ( y=0; y<sD->yAnt; y++)
         {
-            for (x = 0; x < (sD->xAnt-1); x+=2) 
+            /* E.g. sD->xAnt = 1024 s.p. x < 2047 -> 0, 2, ..., 2046 */
+            for (x=0; x<(2*sD->xAnt-1); x+=2)
             {
-                powerTransmitted += (umig[y][2*x]*umig[y][2*x]+umig[y][2*x+1]*umig[y][2*x+1])*
-                                    (mD->epsilonRe*sampleLayer1[y][x/2]/ mD->backRe);
+                powerTransmitted += (umig[y][x]*umig[y][x]+umig[y][x+1]*umig[y][x+1])*
+                                    (1.0+(mD->epsilonRe*sampleLayer1[y][x/2])/mD->backRe);
             }
         }
 
