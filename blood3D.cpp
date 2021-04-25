@@ -29,14 +29,19 @@
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
 
-/* Some file-handling */
-#define LAYER_NUMBER_TO_FILE           0
-#define MULTIPLE_LAYER_NUMBER_TO_FILE  1
-#define LAYER_NUMBER_TO_PRINT          64
+/**** Flags for debug output in textfiles ****/
+
+/* Print one layer to file for fixed z */
+#define LAYER_NUMBER_TO_FILE              0
+#define LAYER_NUMBER_TO_PRINT             64
+/* Print entire layer of RBC to file */
+#define MULTIPLE_LAYER_NUMBER_TO_FILE     1
+/* Print all BloodData to file */
+#define BLOOD_DATA_TO_FILE                1
 
 /* File handles */
 static FILE *fpSampleLayer;
-static FILE* fpBloodData;
+static FILE *fpBloodData;
 
 /* RBC width in sample points */
 static unsigned int bcWidthInSampPoints;
@@ -67,7 +72,7 @@ typedef struct
 /* output of structures ************************************/
 
 /* Function prints one geometry layer to file */
-void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
+static void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
 {
     int x, y;
     char buf[20];
@@ -86,22 +91,58 @@ void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
     fclose(fpSampleLayer);
 }
 
-
-void printfmodelData(modelData *mD)
-{
-    printf("Modelling data\n");
-    printf("angular frequency = %.4f\n", mD->afreq);
-    printf("inclusion = %.4f-i %.4f\n", mD->epsilonRe, mD->epsilonIm);
-    printf("backgroud = %.4f-i %.4f\n", mD->backRe, mD->backIm);
-}
-
-
 void fprintfmodelData(FILE *fp, modelData *mD)
 {
     fprintf(fp, "Modelling data\n");
     fprintf(fp, "angular frequency = %.4f\n", mD->afreq);
     fprintf(fp, "inclusion = %.4f-i %.4f\n", mD->epsilonRe, mD->epsilonIm);
     fprintf(fp, "backgroud = %.4f-i %.4f\n", mD->backRe, mD->backIm);
+}
+
+static void fprintfBloodData( bloodData**** bD, int zdim, int ydim, int xdim )
+{
+    char buf[20];
+    int x, y, z;
+
+    snprintf(buf, sizeof(buf), "bloodData.txt");
+    fopen_s(&fpBloodData, buf, "w");
+
+    fprintf(fpBloodData, "**** BloodData 3D Geometry ****\n");
+    fprintf(fpBloodData, "\n");
+    fprintf(fpBloodData, "\n");
+    fprintf(fpBloodData, "xc = center x coordinate\n");
+    fprintf(fpBloodData, "yc = center y coordinate\n");
+    fprintf(fpBloodData, "zc = center z coordinate\n");
+    fprintf(fpBloodData, "th = Euler theta angle (deg)\n");
+    fprintf(fpBloodData, "fi = Euler fi angle (deg)\n");
+    fprintf(fpBloodData, "psi = Euler psi angle (deg)\n");
+    fprintf(fpBloodData, "ry = random y displacement\n");
+    fprintf(fpBloodData, "rx = random x displacement\n");
+
+    fprintf(fpBloodData, "\n");
+    fprintf(fpBloodData, "\n");
+
+    for (z = 0; z < zdim; z++)
+    {
+        for (y = 0; y < ydim; y++)
+        {
+            for (x = 0; x < xdim; x++)
+            {
+                fprintf(fpBloodData, "zc=%d\t", bD[z][y][x]->zc);
+                fprintf(fpBloodData, "yc=%d\t", bD[z][y][x]->yc);
+                fprintf(fpBloodData, "xc=%d\t", bD[z][y][x]->xc);
+                fprintf(fpBloodData, "th=%d\t", (int)(bD[z][y][x]->theta * 180.0/pi));
+                fprintf(fpBloodData, "fi=%d\t", (int)(bD[z][y][x]->fi * 180.0/pi));
+                fprintf(fpBloodData, "psi=%d\t", (int)(bD[z][y][x]->psi * 180.0/pi));
+                fprintf(fpBloodData, "ry=%d\t", bD[z][y][x]->dy);
+                fprintf(fpBloodData, "rx=%d\t", bD[z][y][x]->dx);
+                fprintf(fpBloodData, "\n");
+            }
+            fprintf(fpBloodData, "\n");
+        }
+        fprintf(fpBloodData, "\n");
+    }
+    fclose(fpBloodData);
 }
 
 /* some complex valued algebra *****************************/
@@ -377,7 +418,7 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             /* Thus, the a=7.76um shall correspond to bcWidthInSampPoints samplepoints.     */
             /* We apply the following tranformations: x -> Sqrt(xe^2+ye^2) and for D(x)     */
             /* we set D(x)^2 -> (2ze)^2 = 4*ze^2. This give a 3D expression and we can use  */
-            /* 4*ze^2 - 4*(1-(Re/R0)^2) * (C0+C2*(Re/R0)^2+C4*(Re/R0)^4))^2 > 0 and if      */
+            /* 4*ze^2 - (1-(Re/R0)^2) * (C0+C2*(Re/R0)^2+C4*(Re/R0)^4))^2 > 0 and if        */
             /* this expression holds then the ze is *not* within the biconcave disk.        */
             /* Also Re=sqrt(xe^2+ye^2) < half cell size to determine if (xe,ye) is within   */
             /* the disk or not.                                                             */
@@ -397,7 +438,7 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             if(Re < bcWidthInSampPoints/2)
             {
                 /* Re is valid to use in the expression */
-                D_xDiff = pow(ze,2) - (1-pow(Re/R0,2)) * pow(C0 + C2*pow(Re/R0,2) + C4*pow(Re/R0,4), 2);
+                D_xDiff = 4*pow(ze,2) - (1-pow(Re/R0,2)) * pow(C0 + C2*pow(Re/R0,2) + C4*pow(Re/R0,4), 2);
                 /* Check if ze is outside or within the biconcave disk */
                 if ( D_xDiff > 0.0)
                 {
@@ -678,6 +719,10 @@ static void propagate(sampData *sD, modelData *mD)
     /* Initialize the 3D grid, blood cell centers only */
     initBloodData3DArray( sD, bD );
 
+#if ( BLOOD_DATA_TO_FILE == 1 )
+    fprintfBloodData(bD, 8, 8, 8);
+#endif
+
     /* Assign field init values.            */
     /* Input field:     Re = 1.0 Im = 0.0   */
     /* Reflected field: Re = 0.0 Im = 0.0   */
@@ -714,8 +759,8 @@ static void propagate(sampData *sD, modelData *mD)
             /* E.g. sD->xAnt = 1024 s.p. x < 2047 -> 0, 2, ..., 2046 */
             for (x=0; x<(2*sD->xAnt-1); x+=2)
             {
-                powerTransmitted += (umig[y][x]*umig[y][x]+umig[y][x+1]*umig[y][x+1])*
-                                    (1.0+(mD->epsilonRe*sampleLayer1[y][x/2])/mD->backRe);
+                powerTransmitted += (umig[y][x] * umig[y][x] + umig[y][x + 1] * umig[y][x + 1]);
+                                    // * (1.0+(mD->epsilonRe*sampleLayer1[y][x/2])/mD->backRe);
             }
         }
 
@@ -759,7 +804,7 @@ int main(void)
     /* RBC max size 7.76 um is equivalent to bcWidthInSampPoints */
     /* lambda = 632.8 nm = (sD.xbox/7.76)*0.6328 s.p             */
 
-    bcWidthInSampPoints = sD.xbox - 4;           /* To avoid RBCs sticking together */
+    bcWidthInSampPoints = sD.xbox;          /* To avoid RBCs sticking together */
     lambda = (bcWidthInSampPoints/7.76)*0.6328;  /* Sample points */
     mD.afreq = 2*pi/lambda;                      /* angular frequency c^{-1} s^{-1} */
     mD.epsilonRe = 1.977;                        /* permittivity */

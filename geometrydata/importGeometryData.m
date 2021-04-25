@@ -70,7 +70,7 @@ close(video);
 figure;
 [x,y,z] = meshgrid(1:1024,1:1024,1:127);
 yslice = [];
-xslice = [320 576 832];
+xslice = [576];
 zslice = [8 40 72 104];
 h = slice(sample3D,xslice,yslice,zslice);
 set(h,'EdgeColor','none');
