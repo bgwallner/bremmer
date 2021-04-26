@@ -68,15 +68,26 @@ end
 
 close(video);
 
-% 3D slice
-figure;
-[x,y,z] = meshgrid(1:1024,1:1024,1:127);
-yslice = [];
-xslice = [576];
-zslice = [72];
-h = slice(sample3D,xslice,yslice,zslice);
-set(h,'EdgeColor','none');
+% Scatter 3d
+figure
+sample3D_reduced = sample3D(1:4:end,1:4:end,1:2:end);
+[X,Y,Z] = ndgrid(1:size(sample3D_reduced,1), 1:size(sample3D_reduced,2), 1:size(sample3D_reduced,3));
+keep = (sample3D_reduced(:) ~= 0);
+X=X(keep);
+Y=Y(keep);
+Z=Z(keep);
+scatter3(X(:), Y(:), Z(:), 5, 'marker','.');
 
 figure
 movie(M);
+
+% Combined plot
+subplot(2,2,1);
+contour(sample3D(:,:,16));
+subplot(2,2,2);
+contour(sample3D(:,:,32));
+subplot(2,2,3);
+contour(sample3D(:,:,48));
+subplot(2,2,4);
+contour(sample3D(:,:,64));
 %clear;
