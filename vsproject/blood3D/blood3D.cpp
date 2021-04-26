@@ -42,6 +42,7 @@
 /* File handles */
 static FILE *fpSampleLayer;
 static FILE *fpBloodData;
+static FILE* fpTransPower;
 
 /* RBC width in sample points */
 static unsigned int bcWidthInSampPoints;
@@ -70,6 +71,18 @@ typedef struct
 
 
 /* output of structures ************************************/
+
+/* Function prints the transmitted power */
+static void fprintfTransPower(double transPower)
+{
+    char buf[20];
+
+    snprintf(buf, sizeof(buf), "transpower.txt");
+    fopen_s(&fpTransPower, buf, "a");
+    fprintf(fpTransPower, "angular frequency = %.4f\n", transPower);
+    fclose(fpTransPower);
+}
+
 
 /* Function prints one geometry layer to file */
 static void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
@@ -396,7 +409,8 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
 
             /* We are now at disk origo. Apply Euler rotation to rotate */
             /* coordinate system into the correct angles and describe   */
-            /* the disk in local coordinates (xe,ye,ze).                */ 
+            /* the disk in local coordinates (xe,ye,ze).                */
+            /* See e.g. Goldstein page 146-147 x'=A*x=BCD*x (eq 4-46)   */
             xe = xl*(cosp*cosf-cost*sinf*sinp) + yl*(cosp*sinf+cost*cosf*sinp) + zl*(sinp*sint);
             ye = xl*(-sinp*cosf-cost*sinf*cosp) + yl*(-sinp*sinf+cost*cosf*cosp) + zl*(cosp*sint);
             ze = xl*(sint*sinf) + yl *(-sint*cosf) + zl*(cost);
@@ -520,11 +534,15 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
         compmult(eta, w, eta, w, &kr, &ki);                   /* wave number (eta + i*w)^2, c^{-1} s */
         compmult(kr, ki, epsr, epsi, &k2r, &ga2i);            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
 
-        /* Iterate over the geometry {ymax * xmax} */
+        /* Iterate over the geometry {ymax * xmax}, important that     */
+        /* wavenumbers etc are calculated over geometry and thus       */
+        /* inner-loop cannot be chosen with "field"-index 0...2*xmax-1 */
         for ( y=0; y<ymax; y++ )
         {
             xiY = y/(ymax*dy)*twopi;                 /* transverse wavenumber */
-            for (x=0; x<(xmax-1); x++)
+
+            /* If xmax=1024 -> x=0,1,...,1023 -> max{2x+1} = 2*1023+1 = 2047  */
+            for (x=0; x<xmax; x++)
             {
                 xiX = x/(xmax*2.0*dx)*twopi;         /* transverse wavenumber */
                 ga2r = k2r + xiX*xiX + xiY*xiY;
@@ -553,12 +571,12 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
 
     } /* interpolation slowness */
 
-    /* TODO: The following code seems to have to be within i loop. Unless modf() handles it */
     if ( ((smax-smin)>0.001) && (imax>1) )
     {
         for ( y=0; y<ymax; y++ ) 
         {
-            for ( x=0; x<(xmax-1); x++ )
+            /* xmax=1024 -> x=0,1,...,1023 -> max{2x+1} = 2*1023+1 = 2047  */
+            for ( x=0; x<xmax; x++ )
             { 
                 /* interpolation */
                 b = modf((slow[y][x]-smin)/(smax-smin)*(imax-1), &ii);
@@ -576,10 +594,11 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
             }
         }
     }
-    else 
+    else
     {
         for ( y=0; y<ymax; y++ ) 
         {
+            /* Plane iteration over geometry. If xmax=1024 then x=0,1,...,2047. */
             for ( x=0; x<2*xmax; x++ )
             {  
                 /*interpolation */
@@ -746,26 +765,26 @@ static void propagate(sampData *sD, modelData *mD)
         create2DGeometry(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
 
         /* Migrate between the two layers */
-        //migrate(sD, mD, sampleLayer1, umig);
+        migrate(sD, mD, sampleLayer1, umig);
         
         /* Calculate interaction between two layers */
         //interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
 
         /* Calculate power in z by summing over x-y plane */
-        /* (uRe^2+uIm^2) * (1+epsilon[y][x/2]) */
         powerTransmitted = 0.0;
         for ( y=0; y<sD->yAnt; y++)
         {
-            /* E.g. sD->xAnt = 1024 s.p. x < 2047 -> 0, 2, ..., 2046 */
-            for (x=0; x<(2*sD->xAnt-1); x+=2)
+            /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
+            for (x=0; x<sD->xAnt; x++)
             {
-                powerTransmitted += (umig[y][x] * umig[y][x] + umig[y][x + 1] * umig[y][x + 1]);
+                powerTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]);
                                     // * (1.0+(mD->epsilonRe*sampleLayer1[y][x/2])/mD->backRe);
             }
         }
 
         /* normalize */
         powerTransmitted = powerTransmitted/(sD->xAnt*sD->yAnt);
+        fprintfTransPower(powerTransmitted);
         printf("z=%d\t energy=%f\n", z, powerTransmitted);
     }
 
