@@ -35,9 +35,11 @@
 #define LAYER_NUMBER_TO_FILE              0
 #define LAYER_NUMBER_TO_PRINT             64
 /* Print entire layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE     1
+#define MULTIPLE_LAYER_NUMBER_TO_FILE     0
 /* Print all BloodData to file */
-#define BLOOD_DATA_TO_FILE                1
+#define BLOOD_DATA_TO_FILE                0
+/* Print transmitted power */
+#define TRANS_POWER_TO_FILE               1
 
 /* File handles */
 static FILE *fpSampleLayer;
@@ -528,11 +530,14 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     eta=0.0;
     for ( i=0; i<imax; i++ )
     {   /*interpolation slowness */
-        s = smin + i*(smax-smin)/(imax-1);                    /* slowness */
-        epsr = mD->backRe + s*(mD->epsilonRe - mD->backRe);   /* Re permittivity, min = mD->back, max = mD->epsilonRe */
-        epsi = s*mD->epsilonIm;                               /* Im permittivity*/
-        compmult(eta, w, eta, w, &kr, &ki);                   /* wave number (eta + i*w)^2, c^{-1} s */
-        compmult(kr, ki, epsr, epsi, &k2r, &ga2i);            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
+        s = smin + i*(smax-smin)/(imax-1);                                    /* slowness */
+        epsr = (mD->backRe + s * (mD->epsilonRe - mD->backRe)) / mD->backRe;  /* Re permittivity, min = mD->back, max = mD->epsilonRe */
+        epsi = s* mD->epsilonIm;                                              /* Im permittivity*/
+        compmult(eta, w, eta, w, &kr, &ki);                                   /* wave number (eta + i*w)^2, c^{-1} s */
+        compmult(kr, ki, epsr, epsi, &k2r, &ga2i);                            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
+
+        printf("kr=%f\t ki=%f\t epsr=%f\t epsi=%f\t k2r=%f\t ga2i=%f\n", 
+                kr, ki, epsr, epsi, k2r, ga2i);
 
         /* Iterate over the geometry {ymax * xmax}, important that     */
         /* wavenumbers etc are calculated over geometry and thus       */
@@ -784,7 +789,11 @@ static void propagate(sampData *sD, modelData *mD)
 
         /* normalize */
         powerTransmitted = powerTransmitted/(sD->xAnt*sD->yAnt);
-        fprintfTransPower(powerTransmitted);
+
+#if (TRANS_POWER_TO_FILE == 1)
+        fprintfTransPower( powerTransmitted );
+#endif
+
         printf("z=%d\t energy=%f\n", z, powerTransmitted);
     }
 
@@ -823,11 +832,15 @@ int main(void)
     /* RBC max size 7.76 um is equivalent to bcWidthInSampPoints */
     /* lambda = 632.8 nm = (sD.xbox/7.76)*0.6328 s.p             */
 
-    bcWidthInSampPoints = sD.xbox;          /* To avoid RBCs sticking together */
+    bcWidthInSampPoints = sD.xbox;               /* RBC width                       */
     lambda = (bcWidthInSampPoints/7.76)*0.6328;  /* Sample points */
     mD.afreq = 2*pi/lambda;                      /* angular frequency c^{-1} s^{-1} */
-    mD.epsilonRe = 1.977;                        /* permittivity */
-    mD.epsilonIm = 0.0002;                       /* permittivity */
+    mD.epsilonRe = 1.977;                        /* Re permittivity RBC             */
+
+    /* Value chosen according to "Simulations of light scattering from a biconcave     */ 
+    /* red blood cell using the finite-differencetime-domain method" by Jun Q. Lu for  */
+    /* lambda = 700nm -> ni = 4.3*10^-6 -> ei = 1.849*10^-11                           */
+    mD.epsilonIm = 0.00000000001849;           /* Im permittivity */
     mD.backRe = 1.809;
     mD.backIm = 0.0;
 
