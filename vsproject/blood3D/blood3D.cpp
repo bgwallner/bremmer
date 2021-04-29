@@ -650,54 +650,55 @@ static void interaction( sampData *sD, modelData *mD,
         y = 0;
         
         /* Transform in-field */
-        fourn_wrapper( uin, xmax, ymax, false ); /* spatial FFT */
+        fourn_wrapper( uin, xmax, ymax, false );     /* spatial FFT */
         
         /* Set permitivity */
-        epsr = 1.0454 + mD->epsilonRe; /* Re permittivity */
-        epsi = mD->epsilonIm; /* Im permittivity*/
+        epsr = (mD->backRe + (mD->epsilonRe - mD->backRe)) / mD->backRe; /* Re permittivity */
+        epsi = mD->epsilonIm;                                            /* Im permittivity*/
 
         /* Compute wavenumber for cells */
-        compmult(eta, w, eta, w, &kr, &ki); /* wavenumber, c^{-1} s */
-        compmult(kr, ki, epsr, epsi, &k2r, &ga2i); /* sqr wavenumber, .^{2} */
+        compmult(eta, w, eta, w, &kr, &ki);           /* wavenumber, c^{-1} s */
+        compmult(kr, ki, epsr, epsi, &k2r, &ga2i);    /* sqr wavenumber, .^{2} */
         
         /* Include background */
-        bsr = 1.0; /* Re of the background */
+        bsr = 1.0;                                    /* Re of the background */
         bsi = 0.0;
 
         /* Compute wavenumber for background */
-        compmult(bsr, bsi, eta, w, &bkr, &bki); /* wavenumber, c^{-1} s */
-        compmult(bkr, bki, bkr, bki, &bk2r, &bga2i); /* sqr wavenumber, .^{2} */
+        compmult(bsr, bsi, eta, w, &bkr, &bki);       /* wavenumber, c^{-1} s */
+        compmult(bkr, bki, bkr, bki, &bk2r, &bga2i);  /* sqr wavenumber, .^{2} */
         
         xiY = 0.0;
-        xiX = 0.0; /* zero transverse wave number */
+        xiX = 0.0;                                    /* zero transverse wave number */
         ga2r = k2r + xiX*xiX + xiY*xiY;
         compsqrt(ga2r, ga2i, &gar, &gai);
         bga2r = bk2r + xiX*xiX + xiY*xiY;
         compsqrt(bga2r, bga2i, &bgar, &bgai);
         compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
-        compmult(refr, refi, uin[y][0], uin[y][1], &urefl[y][0],
-        &urefl[y][1]);
 
-        for (y=0; y<ymax; y++) {
-            for (x=0; x<xmax+2; x+=2){
+        for (y=0; y<ymax; y++) 
+        {
+            xiY = y / (ymax * dy) * twopi;
+
+            for (x=0; x<xmax; x++)
+            {
                 xiX = x/(xmax*2.0*dx)*twopi;
-                xiY = y/(ymax*dy)*twopi;
                 ga2r = k2r + xiX*xiX + xiY*xiY;
                 compsqrt(ga2r, ga2i, &gar, &gai);
                 bga2r = bk2r + xiX*xiX + xiY*xiY;
                 compsqrt(bga2r, bga2i, &bgar, &bgai);
                 compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
-                compmult(refr, refi, uin[y][x], uin[y][x+1], &urefl[y][x],
-                &urefl[y][x+1]); /* reflected field, ur = R*uin */
-                compmult(refr, refi, uin[y][2*xmax-x], uin[y][2*xmax-x+1],
-                &urefl[y][2*xmax-x], &urefl[y][2*xmax-x+1]);
+                compmult(refr, refi, uin[y][2*x], uin[y][2*x+1], &urefl[y][2*x], &urefl[y][2*x+1]); /* reflected field, ur = R*uin */
             }
         }
 
         fourn_wrapper( urefl, xmax, ymax, true ); /* inverse spatial FFT */
-        fourn_wrapper( uin, xmax, ymax, true ); /* inverse spatial FFT fix ????? */
-        for (y=0; y<ymax; y++){
-            for (x=0; x<xmax; x++){
+        fourn_wrapper( uin, xmax, ymax, true );
+
+        for (y=0; y<ymax; y++)
+        {
+            for (x=0; x<xmax; x++)
+            {
                 urefl[y][2*x] = refp[y][x]*urefl[y][2*x];
                 urefl[y][2*x+1] = refp[y][x]*urefl[y][2*x+1];
                 uin[y][2*x] = uin[y][2*x] + urefl[y][2*x];
@@ -705,10 +706,12 @@ static void interaction( sampData *sD, modelData *mD,
             }
         }
     }
-    else {
-        for (y=0; y<ymax; y++){
+    else 
+    {
+        for (y=0; y<ymax; y++)
+        {
                 for (x=0; x<xmax; x++){
-                urefl[y][2*x] = 0.0; /* transmitted field, ut=T*uin = (1+R) uin */
+                urefl[y][2*x] =   0.0; /* transmitted field, ut=T*uin = (1+R) uin */
                 urefl[y][2*x+1] = 0.0;
             }
         }
@@ -773,7 +776,7 @@ static void propagate(sampData *sD, modelData *mD)
         migrate(sD, mD, sampleLayer1, umig);
         
         /* Calculate interaction between two layers */
-        //interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
+        interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
 
         /* Calculate power in z by summing over x-y plane */
         powerTransmitted = 0.0;
@@ -782,8 +785,8 @@ static void propagate(sampData *sD, modelData *mD)
             /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
             for (x=0; x<sD->xAnt; x++)
             {
-                powerTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]);
-                                    // * (1.0+(mD->epsilonRe*sampleLayer1[y][x/2])/mD->backRe);
+                powerTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
+                                    (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe;
             }
         }
 

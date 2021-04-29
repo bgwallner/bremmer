@@ -35,9 +35,11 @@
 #define LAYER_NUMBER_TO_FILE              0
 #define LAYER_NUMBER_TO_PRINT             64
 /* Print entire layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE     1
+#define MULTIPLE_LAYER_NUMBER_TO_FILE     0
 /* Print all BloodData to file */
-#define BLOOD_DATA_TO_FILE                1
+#define BLOOD_DATA_TO_FILE                0
+/* Print transmitted power */
+#define TRANS_POWER_TO_FILE               1
 
 /* File handles */
 static FILE *fpSampleLayer;
@@ -528,11 +530,14 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     eta=0.0;
     for ( i=0; i<imax; i++ )
     {   /*interpolation slowness */
-        s = smin + i*(smax-smin)/(imax-1);                    /* slowness */
-        epsr = mD->backRe + s*(mD->epsilonRe - mD->backRe);   /* Re permittivity, min = mD->back, max = mD->epsilonRe */
-        epsi = s*mD->epsilonIm;                               /* Im permittivity*/
-        compmult(eta, w, eta, w, &kr, &ki);                   /* wave number (eta + i*w)^2, c^{-1} s */
-        compmult(kr, ki, epsr, epsi, &k2r, &ga2i);            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
+        s = smin + i*(smax-smin)/(imax-1);                                    /* slowness */
+        epsr = (mD->backRe + s * (mD->epsilonRe - mD->backRe)) / mD->backRe;  /* Re permittivity, min = mD->back, max = mD->epsilonRe */
+        epsi = s* mD->epsilonIm;                                              /* Im permittivity*/
+        compmult(eta, w, eta, w, &kr, &ki);                                   /* wave number (eta + i*w)^2, c^{-1} s */
+        compmult(kr, ki, epsr, epsi, &k2r, &ga2i);                            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
+
+        printf("kr=%f\t ki=%f\t epsr=%f\t epsi=%f\t k2r=%f\t ga2i=%f\n", 
+                kr, ki, epsr, epsi, k2r, ga2i);
 
         /* Iterate over the geometry {ymax * xmax}, important that     */
         /* wavenumbers etc are calculated over geometry and thus       */
@@ -645,54 +650,55 @@ static void interaction( sampData *sD, modelData *mD,
         y = 0;
         
         /* Transform in-field */
-        fourn_wrapper( uin, xmax, ymax, false ); /* spatial FFT */
+        fourn_wrapper( uin, xmax, ymax, false );     /* spatial FFT */
         
         /* Set permitivity */
-        epsr = 1.0454 + mD->epsilonRe; /* Re permittivity */
-        epsi = mD->epsilonIm; /* Im permittivity*/
+        epsr = (mD->backRe + (mD->epsilonRe - mD->backRe)) / mD->backRe; /* Re permittivity */
+        epsi = mD->epsilonIm;                                            /* Im permittivity*/
 
         /* Compute wavenumber for cells */
-        compmult(eta, w, eta, w, &kr, &ki); /* wavenumber, c^{-1} s */
-        compmult(kr, ki, epsr, epsi, &k2r, &ga2i); /* sqr wavenumber, .^{2} */
+        compmult(eta, w, eta, w, &kr, &ki);           /* wavenumber, c^{-1} s */
+        compmult(kr, ki, epsr, epsi, &k2r, &ga2i);    /* sqr wavenumber, .^{2} */
         
         /* Include background */
-        bsr = 1.0; /* Re of the background */
+        bsr = 1.0;                                    /* Re of the background */
         bsi = 0.0;
 
         /* Compute wavenumber for background */
-        compmult(bsr, bsi, eta, w, &bkr, &bki); /* wavenumber, c^{-1} s */
-        compmult(bkr, bki, bkr, bki, &bk2r, &bga2i); /* sqr wavenumber, .^{2} */
+        compmult(bsr, bsi, eta, w, &bkr, &bki);       /* wavenumber, c^{-1} s */
+        compmult(bkr, bki, bkr, bki, &bk2r, &bga2i);  /* sqr wavenumber, .^{2} */
         
         xiY = 0.0;
-        xiX = 0.0; /* zero transverse wave number */
+        xiX = 0.0;                                    /* zero transverse wave number */
         ga2r = k2r + xiX*xiX + xiY*xiY;
         compsqrt(ga2r, ga2i, &gar, &gai);
         bga2r = bk2r + xiX*xiX + xiY*xiY;
         compsqrt(bga2r, bga2i, &bgar, &bgai);
         compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
-        compmult(refr, refi, uin[y][0], uin[y][1], &urefl[y][0],
-        &urefl[y][1]);
 
-        for (y=0; y<ymax; y++) {
-            for (x=0; x<xmax+2; x+=2){
+        for (y=0; y<ymax; y++) 
+        {
+            xiY = y / (ymax * dy) * twopi;
+
+            for (x=0; x<xmax; x++)
+            {
                 xiX = x/(xmax*2.0*dx)*twopi;
-                xiY = y/(ymax*dy)*twopi;
                 ga2r = k2r + xiX*xiX + xiY*xiY;
                 compsqrt(ga2r, ga2i, &gar, &gai);
                 bga2r = bk2r + xiX*xiX + xiY*xiY;
                 compsqrt(bga2r, bga2i, &bgar, &bgai);
                 compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
-                compmult(refr, refi, uin[y][x], uin[y][x+1], &urefl[y][x],
-                &urefl[y][x+1]); /* reflected field, ur = R*uin */
-                compmult(refr, refi, uin[y][2*xmax-x], uin[y][2*xmax-x+1],
-                &urefl[y][2*xmax-x], &urefl[y][2*xmax-x+1]);
+                compmult(refr, refi, uin[y][2*x], uin[y][2*x+1], &urefl[y][2*x], &urefl[y][2*x+1]); /* reflected field, ur = R*uin */
             }
         }
 
         fourn_wrapper( urefl, xmax, ymax, true ); /* inverse spatial FFT */
-        fourn_wrapper( uin, xmax, ymax, true ); /* inverse spatial FFT fix ????? */
-        for (y=0; y<ymax; y++){
-            for (x=0; x<xmax; x++){
+        fourn_wrapper( uin, xmax, ymax, true );
+
+        for (y=0; y<ymax; y++)
+        {
+            for (x=0; x<xmax; x++)
+            {
                 urefl[y][2*x] = refp[y][x]*urefl[y][2*x];
                 urefl[y][2*x+1] = refp[y][x]*urefl[y][2*x+1];
                 uin[y][2*x] = uin[y][2*x] + urefl[y][2*x];
@@ -700,10 +706,12 @@ static void interaction( sampData *sD, modelData *mD,
             }
         }
     }
-    else {
-        for (y=0; y<ymax; y++){
+    else 
+    {
+        for (y=0; y<ymax; y++)
+        {
                 for (x=0; x<xmax; x++){
-                urefl[y][2*x] = 0.0; /* transmitted field, ut=T*uin = (1+R) uin */
+                urefl[y][2*x] =   0.0; /* transmitted field, ut=T*uin = (1+R) uin */
                 urefl[y][2*x+1] = 0.0;
             }
         }
@@ -768,7 +776,7 @@ static void propagate(sampData *sD, modelData *mD)
         migrate(sD, mD, sampleLayer1, umig);
         
         /* Calculate interaction between two layers */
-        //interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
+        interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
 
         /* Calculate power in z by summing over x-y plane */
         powerTransmitted = 0.0;
@@ -777,14 +785,18 @@ static void propagate(sampData *sD, modelData *mD)
             /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
             for (x=0; x<sD->xAnt; x++)
             {
-                powerTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]);
-                                    // * (1.0+(mD->epsilonRe*sampleLayer1[y][x/2])/mD->backRe);
+                powerTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
+                                    (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe;
             }
         }
 
         /* normalize */
         powerTransmitted = powerTransmitted/(sD->xAnt*sD->yAnt);
-        fprintfTransPower(powerTransmitted);
+
+#if (TRANS_POWER_TO_FILE == 1)
+        fprintfTransPower( powerTransmitted );
+#endif
+
         printf("z=%d\t energy=%f\n", z, powerTransmitted);
     }
 
@@ -823,11 +835,15 @@ int main(void)
     /* RBC max size 7.76 um is equivalent to bcWidthInSampPoints */
     /* lambda = 632.8 nm = (sD.xbox/7.76)*0.6328 s.p             */
 
-    bcWidthInSampPoints = sD.xbox;          /* To avoid RBCs sticking together */
+    bcWidthInSampPoints = sD.xbox;               /* RBC width                       */
     lambda = (bcWidthInSampPoints/7.76)*0.6328;  /* Sample points */
     mD.afreq = 2*pi/lambda;                      /* angular frequency c^{-1} s^{-1} */
-    mD.epsilonRe = 1.977;                        /* permittivity */
-    mD.epsilonIm = 0.0002;                       /* permittivity */
+    mD.epsilonRe = 1.977;                        /* Re permittivity RBC             */
+
+    /* Value chosen according to "Simulations of light scattering from a biconcave     */ 
+    /* red blood cell using the finite-differencetime-domain method" by Jun Q. Lu for  */
+    /* lambda = 700nm -> ni = 4.3*10^-6 -> ei = 1.849*10^-11                           */
+    mD.epsilonIm = 0.00000000001849;           /* Im permittivity */
     mD.backRe = 1.809;
     mD.backIm = 0.0;
 
