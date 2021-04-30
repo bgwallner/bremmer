@@ -35,9 +35,9 @@
 #define LAYER_NUMBER_TO_FILE              0
 #define LAYER_NUMBER_TO_PRINT             64
 /* Print entire layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE     0
+#define MULTIPLE_LAYER_NUMBER_TO_FILE     1
 /* Print all BloodData to file */
-#define BLOOD_DATA_TO_FILE                0
+#define BLOOD_DATA_TO_FILE                1
 /* Print transmitted power */
 #define TRANS_POWER_TO_FILE               1
 
@@ -75,11 +75,11 @@ typedef struct
 /* output of structures ************************************/
 
 /* Function prints the transmitted power */
-static void fprintfTransPower(double transPower)
+static void fprintftransPowerFluxData(double transPower)
 {
-    char buf[20];
+    char buf[40];
 
-    snprintf(buf, sizeof(buf), "transpower.txt");
+    snprintf(buf, sizeof(buf), "data/fieldData/transpowerflux.txt");
     fopen_s(&fpTransPower, buf, "a");
     fprintf(fpTransPower, "angular frequency = %.4f\n", transPower);
     fclose(fpTransPower);
@@ -90,9 +90,9 @@ static void fprintfTransPower(double transPower)
 static void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
 {
     int x, y;
-    char buf[20];
+    char buf[40];
 
-    snprintf(buf, sizeof(buf), "samplelayer%d.txt", z);
+    snprintf(buf, sizeof(buf), "data/geometryData/samplelayer%d.txt", z);
     fopen_s(&fpSampleLayer, buf, "w");
 
     for (y = 0; y < sD->yAnt; y++)
@@ -111,15 +111,15 @@ void fprintfmodelData(FILE *fp, modelData *mD)
     fprintf(fp, "Modelling data\n");
     fprintf(fp, "angular frequency = %.4f\n", mD->afreq);
     fprintf(fp, "inclusion = %.4f-i %.4f\n", mD->epsilonRe, mD->epsilonIm);
-    fprintf(fp, "backgroud = %.4f-i %.4f\n", mD->backRe, mD->backIm);
+    fprintf(fp, "background = %.4f-i %.4f\n", mD->backRe, mD->backIm);
 }
 
 static void fprintfBloodData( bloodData**** bD, int zdim, int ydim, int xdim )
 {
-    char buf[20];
+    char buf[40];
     int x, y, z;
 
-    snprintf(buf, sizeof(buf), "bloodData.txt");
+    snprintf(buf, sizeof(buf), "data/modelData/bloodData.txt");
     fopen_s(&fpBloodData, buf, "w");
 
     fprintf(fpBloodData, "**** BloodData 3D Geometry ****\n");
@@ -536,7 +536,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
         compmult(eta, w, eta, w, &kr, &ki);                                   /* wave number (eta + i*w)^2, c^{-1} s */
         compmult(kr, ki, epsr, epsi, &k2r, &ga2i);                            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
 
-        printf("kr=%f\t ki=%f\t epsr=%f\t epsi=%f\t k2r=%f\t ga2i=%f\n", 
+        printf("MIGRATE: kr=%f\t ki=%f\t epsr=%f\t epsi=%f\t k2r=%f\t ga2i=%f\n", 
                 kr, ki, epsr, epsi, k2r, ga2i);
 
         /* Iterate over the geometry {ymax * xmax}, important that     */
@@ -555,19 +555,6 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
                 propr = cos(-dz*gai) * exp(-dz*gar);
                 propi = sin(-dz*gai) * exp(-dz*gar);
                 compmult(propr, propi, u1[y][2*x], u1[y][2*x+1], &v1[i][y][2*x], &v1[i][y][2*x+1]);
-
-                /* TODO: Do we really need this crap? Seems only to make it possible to use */
-                /* fewer loops by letting iteration be (xmax,ymax)/2. This is just creating */
-                /* index complexity and creating special cases.                             */
-                
-                /************************THIS NEEDED******************************************** 
-                 * compmult(propr, propi, u1[y][2*xmax-x], u1[y][2*xmax-x+1], 
-                 *           &v1[i][y][2*xmax-x], &v1[i][y][2*xmax-x+1]);
-                 * compmult(propr, propi, u1[ymax-y][x], u1[ymax-y][x+1], 
-                 *          &v1[i][ymax-y][x], &v1[i][ymax-y][x+1]);
-                 * compmult(propr, propi, u1[ymax-y][2*xmax-x], u1[ymax-y][2*xmax-x+1], 
-                 *          &v1[i][ymax-y][2*xmax-x], &v1[i][ymax-y][2*xmax-x+1]);
-                 ******************************************************************************/
             }
         }
 
@@ -667,6 +654,9 @@ static void interaction( sampData *sD, modelData *mD,
         /* Compute wavenumber for background */
         compmult(bsr, bsi, eta, w, &bkr, &bki);       /* wavenumber, c^{-1} s */
         compmult(bkr, bki, bkr, bki, &bk2r, &bga2i);  /* sqr wavenumber, .^{2} */
+
+        printf("INTERACTION: kr=%f\t ki=%f\t epsr=%f\t epsi=%f\t k2r=%f\t ga2i=%f\n",
+            kr, ki, epsr, epsi, k2r, ga2i);
         
         xiY = 0.0;
         xiX = 0.0;                                    /* zero transverse wave number */
@@ -687,6 +677,9 @@ static void interaction( sampData *sD, modelData *mD,
                 compsqrt(ga2r, ga2i, &gar, &gai);
                 bga2r = bk2r + xiX*xiX + xiY*xiY;
                 compsqrt(bga2r, bga2i, &bgar, &bgai);
+
+                //printPropagators(epsr, epsi, w, eta, kr, ki, k2r, ga2i, bk2t, bga2i, gar, gai, bgar, bgai);
+
                 compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
                 compmult(refr, refi, uin[y][2*x], uin[y][2*x+1], &urefl[y][2*x], &urefl[y][2*x+1]); /* reflected field, ur = R*uin */
             }
@@ -723,7 +716,7 @@ static void interaction( sampData *sD, modelData *mD,
 static void propagate(sampData *sD, modelData *mD) 
 {
     int x, y, z;
-    double powerTransmitted;
+    double powerfluxTransmitted, powerfluxReflected;
 
     /* Indexing [z][y][x] will be used where z is in propagation direction  */
     /* Fields in plane [y][x] will have Re[field] = field[y][x]             */
@@ -776,31 +769,38 @@ static void propagate(sampData *sD, modelData *mD)
         migrate(sD, mD, sampleLayer1, umig);
         
         /* Calculate interaction between two layers */
-        interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
+        //interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
 
-        /* Calculate power in z by summing over x-y plane */
-        powerTransmitted = 0.0;
+        /* Calculate powerflux in z by summing over x-y plane */
+        powerfluxTransmitted = 0.0;
+        powerfluxReflected   = 0.0;
         for ( y=0; y<sD->yAnt; y++)
         {
             /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
             for (x=0; x<sD->xAnt; x++)
             {
-                powerTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
-                                    (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe;
+                powerfluxTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
+                                        (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe;
+
+                powerfluxReflected   += (uref[y][2*x] * uref[y][2*x] + uref[y][2*x + 1] * uref[y][2*x + 1]) *
+                                        (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe;
             }
         }
 
         /* normalize */
-        powerTransmitted = powerTransmitted/(sD->xAnt*sD->yAnt);
+        powerfluxTransmitted = powerfluxTransmitted /(sD->xAnt*sD->yAnt);
+        powerfluxReflected   = powerfluxReflected / (sD->xAnt * sD->yAnt);
 
 #if (TRANS_POWER_TO_FILE == 1)
-        fprintfTransPower( powerTransmitted );
+        fprintftransPowerFluxData(powerfluxTransmitted);
 #endif
 
-        printf("z=%d\t energy=%f\n", z, powerTransmitted);
+        printf("z=%d\t Powerflux transmitted=%f\t Powerflux reflected=%f\n",
+                z, powerfluxTransmitted, powerfluxReflected);
+        printf("\n");
     }
 
-    printf("propagation end \n");
+    printf("Program Exit. \n");
 }
 
 /************************************************/
