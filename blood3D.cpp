@@ -17,11 +17,8 @@
 #define pi                     3.14159265358
 #define max32bit               4294967295
 
-#define DEBUG                  1
-#define MAX_LIMIT              20000
-#define PRINTOUT               0
-#define FIELD_MAX_REAL         100000
-#define FIELD_MAX_IM           100000
+/* Development environment */
+#define GNU_LINUX              0
 
 /* Choose one angle setup for different simulations */
 #define ANGLES_RANDOM          1
@@ -29,22 +26,32 @@
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
 
+#define SIMULATION_DEPTH       200
+
 /**** Flags for debug output in textfiles ****/
 
-/* Print one layer to file for fixed z */
-#define LAYER_NUMBER_TO_FILE              0
-#define LAYER_NUMBER_TO_PRINT             64
 /* Print entire layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE     1
+#define MULTIPLE_LAYER_NUMBER_TO_FILE     0
+/* The number of model layers */
+#define NBR_OF_LAYERS_TO_FILE             128
 /* Print all BloodData to file */
 #define BLOOD_DATA_TO_FILE                1
 /* Print transmitted power */
 #define TRANS_POWER_TO_FILE               1
+/* Print vars in propagate() */
+#define PRINT_MIGRATE_DATA                1
+/* Print vars in migrate() */
+#define PRINT_INTERACTION_DATA            0
+/* Print field absolute to file */
+#define PRINT_ABSOLUTE_FIELD_TO_FILE      0
 
 /* File handles */
 static FILE *fpSampleLayer;
 static FILE *fpBloodData;
 static FILE* fpTransPower;
+static FILE* fpInteractionData;
+static FILE* fpMigrateData;
+static FILE* fpAbsoluteField;
 
 /* RBC width in sample points */
 static unsigned int bcWidthInSampPoints;
@@ -104,6 +111,20 @@ static void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
         fprintf(fpSampleLayer, "\n");
     }
     fclose(fpSampleLayer);
+}
+
+static void fprintMigrateData(double epsr, double epsi, double w, double eta, double kr, 
+                              double ki, double k2r, double ga2i)
+{
+    char buf[40];
+
+    snprintf(buf, sizeof(buf), "data/modelData/migratedata.txt");
+    fopen_s(&fpMigrateData, buf, "a");
+    fprintf(fpMigrateData, "permitivity = %.4f-i %.4f\n", epsr, epsi);
+    fprintf(fpMigrateData, "angular freq = %.4f\t eta = %.4f\t kr = %.4f\t ki = %.4f\n", w, eta, kr, ki);
+    fprintf(fpMigrateData, "k2r = %.4f\t ga2i = %.4f\n", k2r, ga2i);
+    fprintf(fpMigrateData, "\n");
+    fclose(fpMigrateData);
 }
 
 void fprintfmodelData(FILE *fp, modelData *mD)
@@ -475,15 +496,9 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
         }
     }
 
-#if (LAYER_NUMBER_TO_FILE == 1)
-    if (LAYER_NUMBER_TO_PRINT == z)
-    {
-        /* Printf layer z to file */
-        fprintfsampData(sD, geometry2D, z);
-    }
-#else if ( MULTIPLE_LAYER_NUMBER_TO_FILE)
-    /* Print layers 0->sD->zbox to files */
-    if (z < sD->zbox)
+#if ( MULTIPLE_LAYER_NUMBER_TO_FILE)
+    /* Print layers 0->NBR_OF_LAYERS_TO_FILE to files */
+    if (z < NBR_OF_LAYERS_TO_FILE)
     {
         fprintfsampData(sD, geometry2D, z);
     }
@@ -536,8 +551,9 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
         compmult(eta, w, eta, w, &kr, &ki);                                   /* wave number (eta + i*w)^2, c^{-1} s */
         compmult(kr, ki, epsr, epsi, &k2r, &ga2i);                            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
 
-        printf("MIGRATE: kr=%f\t ki=%f\t epsr=%f\t epsi=%f\t k2r=%f\t ga2i=%f\n", 
-                kr, ki, epsr, epsi, k2r, ga2i);
+#if ( PRINT_MIGRATE_DATA == 1 )
+        fprintMigrateData(epsr, epsi, w, eta, kr, ki, k2r, ga2i);
+#endif
 
         /* Iterate over the geometry {ymax * xmax}, important that     */
         /* wavenumbers etc are calculated over geometry and thus       */
@@ -655,9 +671,6 @@ static void interaction( sampData *sD, modelData *mD,
         compmult(bsr, bsi, eta, w, &bkr, &bki);       /* wavenumber, c^{-1} s */
         compmult(bkr, bki, bkr, bki, &bk2r, &bga2i);  /* sqr wavenumber, .^{2} */
 
-        printf("INTERACTION: kr=%f\t ki=%f\t epsr=%f\t epsi=%f\t k2r=%f\t ga2i=%f\n",
-            kr, ki, epsr, epsi, k2r, ga2i);
-        
         xiY = 0.0;
         xiX = 0.0;                                    /* zero transverse wave number */
         ga2r = k2r + xiX*xiX + xiY*xiY;
@@ -677,11 +690,12 @@ static void interaction( sampData *sD, modelData *mD,
                 compsqrt(ga2r, ga2i, &gar, &gai);
                 bga2r = bk2r + xiX*xiX + xiY*xiY;
                 compsqrt(bga2r, bga2i, &bgar, &bgai);
-
-                //printPropagators(epsr, epsi, w, eta, kr, ki, k2r, ga2i, bk2t, bga2i, gar, gai, bgar, bgai);
-
                 compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
                 compmult(refr, refi, uin[y][2*x], uin[y][2*x+1], &urefl[y][2*x], &urefl[y][2*x+1]); /* reflected field, ur = R*uin */
+
+#if ( PRINT_INTERACTION_DATA == 1 )
+                fprintInteractionData(x, y, epsr, epsi, w, eta, kr, ki, k2r, ga2i, bk2t, bga2i, gar, gai, bgar, bgai);
+#endif
             }
         }
 
@@ -758,8 +772,8 @@ static void propagate(sampData *sD, modelData *mD)
         }
     }
 
-    /* Start propagate from z=0 to z=(sD->zAnt-2) */
-    for (z=0; z<(sD->zAnt-1); z++)
+    /* Start propagate from z=0 to z=(SIMULATION_DEPTH-1), max{z}=(sD->zAnt-2) */
+    for (z=0; z< SIMULATION_DEPTH; z++)
     {
         /* Fill two layers in xy-plane with sample points */ 
         create2DGeometry(sD, bD[z/sD->zbox], sampleLayer1, z);
@@ -797,7 +811,6 @@ static void propagate(sampData *sD, modelData *mD)
 
         printf("z=%d\t Powerflux transmitted=%f\t Powerflux reflected=%f\n",
                 z, powerfluxTransmitted, powerfluxReflected);
-        printf("\n");
     }
 
     printf("Program Exit. \n");
@@ -835,20 +848,19 @@ int main(void)
     /* RBC max size 7.76 um is equivalent to bcWidthInSampPoints */
     /* lambda = 632.8 nm = (sD.xbox/7.76)*0.6328 s.p             */
 
-    bcWidthInSampPoints = sD.xbox;               /* RBC width                       */
-    lambda = (bcWidthInSampPoints/7.76)*0.6328;  /* Sample points */
-    mD.afreq = 2*pi/lambda;                      /* angular frequency c^{-1} s^{-1} */
-    mD.epsilonRe = 1.977;                        /* Re permittivity RBC             */
+    bcWidthInSampPoints = sD.xbox;               /* RBC width                          */
+    lambda = (bcWidthInSampPoints/7.76)*0.6328;  /* Sample points                      */
+    mD.afreq = 2*pi/lambda;                      /* angular frequency c^{-1} s^{-1}    */
+    mD.epsilonRe = 1.977;                        /* Re permittivity RBC                */
 
     /* Value chosen according to "Simulations of light scattering from a biconcave     */ 
     /* red blood cell using the finite-differencetime-domain method" by Jun Q. Lu for  */
     /* lambda = 700nm -> ni = 4.3*10^-6 -> ei = 1.849*10^-11                           */
-    mD.epsilonIm = 0.00000000001849;           /* Im permittivity */
+    mD.epsilonIm = 0.00000000001849;             /* Im permittivity */
     mD.backRe = 1.809;
     mD.backIm = 0.0;
 
     /* Start random number generator */
-    //srand(time(0));
     std::srand(time(0));
 
     /* Model contains 2D layer with ALL samplepoints */
