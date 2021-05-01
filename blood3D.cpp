@@ -16,6 +16,7 @@
 #define twopi                  6.283185307177959
 #define pi                     3.14159265358
 #define max32bit               4294967295
+#define initFieldValue         1000.0
 
 /* Development environment */
 #define GNU_LINUX              0
@@ -26,6 +27,7 @@
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
 
+/* Number of layers to simulate in propagation direction */
 #define SIMULATION_DEPTH       200
 
 /**** Flags for debug output in textfiles ****/
@@ -39,7 +41,7 @@
 /* Print transmitted power */
 #define TRANS_POWER_TO_FILE               1
 /* Print vars in propagate() */
-#define PRINT_MIGRATE_DATA                1
+#define PRINT_MIGRATE_DATA                0
 /* Print vars in migrate() */
 #define PRINT_INTERACTION_DATA            0
 /* Print field absolute to file */
@@ -445,7 +447,7 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             /* and Euler rotation (since we decided to describe the    */
             /* object with Euler angles).                              */
 
-            /************ BICONCAVE DISK / BLOODCELL APPROACH **********/
+            /******************* BICONCAVE DISK / BLOODCELL APPROACH ***********************/
 
             /* Suggestion by A.Karlsson "Numerical Simulations of Light Scattering          */
             /* by Red Blood Cells" the equation for the biconcave disk can be               */
@@ -459,6 +461,12 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             /* this expression holds then the ze is *not* within the biconcave disk.        */
             /* Also Re=sqrt(xe^2+ye^2) < half cell size to determine if (xe,ye) is within   */
             /* the disk or not.                                                             */
+
+            /* NOTICE: One could add more decimals to C0, C2 and C4 to get a more exact     */
+            /* condition. Now boundary can differ slightly for the RBC making it to take    */
+            /* slightly more space than the size of the "box". In practice this is a        */
+            /* neglectible problem.                                                         */
+
             R0 = 64.4948;
             C0 = 13.3608;
             C2 = 129.1546;
@@ -765,7 +773,7 @@ static void propagate(sampData *sD, modelData *mD)
         /* E.g. sD->xAnt = 1024 s.p. x < 2047 -> 0, 2, ..., 2046 */
         for (x=0; x<(2*sD->xAnt-1); x+=2)
         {
-            umig[y][x] =   1.0;
+            umig[y][x]   = initFieldValue;
             umig[y][x+1] = 0.0;
             uref[y][x]   = 0.0;
             uref[y][x+1] = 0.0;
@@ -794,10 +802,12 @@ static void propagate(sampData *sD, modelData *mD)
             for (x=0; x<sD->xAnt; x++)
             {
                 powerfluxTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
-                                        (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe;
+                                        (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) /
+                                        (mD->backRe* initFieldValue* initFieldValue);
 
                 powerfluxReflected   += (uref[y][2*x] * uref[y][2*x] + uref[y][2*x + 1] * uref[y][2*x + 1]) *
-                                        (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe;
+                                        (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) /
+                                        (mD->backRe * initFieldValue * initFieldValue);;
             }
         }
 
