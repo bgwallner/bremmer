@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <random>
+#include <complex>
+
 //#include <time.h>
 #include <ctime>
 #include <assert.h>
@@ -66,8 +68,8 @@ typedef struct
 
 typedef struct 
 {
-    int xAnt, yAnt, zAnt, iAnt, xout, zout;
-    double dx, dy, dz, fraction;
+    int xAnt, yAnt, zAnt, iAnt;
+    double dx, dy, dz;
     int xbox, ybox, zbox;
 } sampData;
 
@@ -75,9 +77,9 @@ typedef struct
 /* Describes medium */
 typedef struct
 {
-    double afreq; /* angular frequency */
+    double afreq;                /* angular frequency */
     double epsilonRe, epsilonIm; /* inclusion permittivity */
-    double backRe, backIm; /* backgound permittivity */
+    double backRe, backIm;       /* background permittivity */
 } modelData;
 
 
@@ -202,39 +204,42 @@ static void fprintfBloodData( bloodData**** bD, int zdim, int ydim, int xdim )
 }
 
 /* some complex valued algebra *****************************/
-void compsqrt(double a, double b, double *c, double *d)
+static void compsqrt(double a, double b, double *c, double *d)
 {
-    *d = sqrt(a*a + b*b);
-    *c = sqrt((*d + a)/2.0);
-    *d = sqrt((*d -a )/2.0);
-    *d = (b < 0) ? -*d : *d;
+    complex<double> dval;
+    dval = std::sqrt(std::complex<double>(a, b));
+    *c = dval.real();
+    *d = dval.imag();
 }
 
 /* Multiply (ar + i*ai)(br + i*bi) */
-void compmult(double ar, double ai, double br, double bi, double *cr, double *ci)
+static void compmult(double ar, double ai, double br, double bi, double *cr, double *ci)
 {
-    *cr = ar*br - ai*bi;
-    *ci = ar*bi + ai*br;
+    complex<double> dval;
+    dval = (std::complex<double>(ar, ai)) * (std::complex<double>(br, bi));
+    *cr = dval.real();
+    *ci = dval.imag();
 }
 
-void compdiv(double ar, double ai, double br, double bi, double *cr, double *ci)
+static void compdiv(double ar, double ai, double br, double bi, double *cr, double *ci)
 {
-    *ci = br*br + bi*bi;
-    *cr = (ar*br + ai*bi)/(*ci);
-    *ci = (br*ai - bi*ar)/(*ci);
+    complex<double> dval;
+    dval = (std::complex<double>(ar, ai)) / (std::complex<double>(br, bi));
+    *cr = dval.real();
+    *ci = dval.imag();
 }
 
-double compabs(double ar, double ai)
+static double compabs(double ar, double ai)
 {
-    return sqrt(ar*ar + ai*ai);
+    return std::abs(std::complex<double>(ar, ai));
 }
 
-double absolut(double a)
+static double absolut(double a)
 {
     return (a < 0) ? -a : a;
 }
 
-double random1(double a)
+static double random1(double a)
 {
     //return a*rand()/(1.0*RAND_MAX);
     std::random_device dev;
@@ -244,7 +249,7 @@ double random1(double a)
 }
 
 /* Calculate FFT */
-void fourn_wrapper(MatDoub& u1, int xmax, int ymax, bool inverse)
+static void fourn_wrapper(MatDoub& u1, int xmax, int ymax, bool inverse)
 {
     int i, y, x;
     bool stop;
@@ -319,7 +324,7 @@ void fourn_wrapper(MatDoub& u1, int xmax, int ymax, bool inverse)
 /* 
  * Memoryallocation of bloodData 3D array
  */
-bloodData ****mallocBloodData3DArray(int dim1, int dim2, int dim3)
+static bloodData ****mallocBloodData3DArray(int dim1, int dim2, int dim3)
 {
     int i, j, k;
     bloodData ****a = (bloodData ****) malloc(dim1 * sizeof(bloodData ***));
@@ -338,7 +343,7 @@ bloodData ****mallocBloodData3DArray(int dim1, int dim2, int dim3)
 /* 
  * Create 3D array with bloodData
  */
-void initBloodData3DArray(sampData *sD, bloodData ****bD)
+static void initBloodData3DArray(sampData *sD, bloodData ****bD)
 {
     int nbrOfXbox, nbrOfYbox, nbrOfZbox;
     int zb, xb, yb, dx, dy;
@@ -481,8 +486,8 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             /* the disk or not.                                                             */
 
             /* NOTICE: One could add more decimals to C0, C2 and C4 to get a more exact     */
-            /* condition. Now boundary can differ slightly for the RBC making it to take    */
-            /* slightly more space than the size of the "box". In practice this is a        */
+            /* condition. Now the boundary can differ slightly for the RBC making it to     */
+            /* take slightly more space than the size of the "box". In practice this is a   */
             /* neglectible problem.                                                         */
 
             R0 = 64.4948;
@@ -866,8 +871,7 @@ int main(void)
     sD.ybox = sD.yAnt / 8;
     sD.zbox = sD.zAnt / 8;
 
-    sD.zout = 128;
-    sD.xout = 128;
+    /* Number of iterations for "smoothing" */
     sD.iAnt = 2;
         
         
