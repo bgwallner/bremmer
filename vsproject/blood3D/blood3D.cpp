@@ -41,7 +41,7 @@
 /* Print transmitted power */
 #define TRANS_POWER_TO_FILE               1
 /* Print vars in propagate() */
-#define PRINT_MIGRATE_DATA                0
+#define PRINT_MIGRATE_DATA                1
 /* Print vars in migrate() */
 #define PRINT_INTERACTION_DATA            0
 /* Print field absolute to file */
@@ -87,9 +87,14 @@ typedef struct
 static void fprintftransPowerFluxData(double transPower)
 {
     char buf[40];
-
     snprintf(buf, sizeof(buf), "data/fieldData/transpowerflux.txt");
+
+#if ( GNU_LINUX == 1 )
+    fpTransPower = fopen(buf, "a");
+#else
     fopen_s(&fpTransPower, buf, "a");
+#endif
+
     fprintf(fpTransPower, "angular frequency = %.4f\n", transPower);
     fclose(fpTransPower);
 }
@@ -100,9 +105,13 @@ static void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
 {
     int x, y;
     char buf[40];
-
     snprintf(buf, sizeof(buf), "data/geometryData/samplelayer%d.txt", z);
+
+#if ( GNU_LINUX == 1 )
+    fpSampleLayer = fopen(buf, "w");
+#else
     fopen_s(&fpSampleLayer, buf, "w");
+#endif
 
     for (y = 0; y < sD->yAnt; y++)
     {
@@ -119,12 +128,17 @@ static void fprintMigrateData(double epsr, double epsi, double w, double eta, do
                               double ki, double k2r, double ga2i)
 {
     char buf[40];
-
     snprintf(buf, sizeof(buf), "data/modelData/migratedata.txt");
+
+#if ( GNU_LINUX == 1 )
+    fpMigrateData = fopen(buf, "a");
+#else
     fopen_s(&fpMigrateData, buf, "a");
-    fprintf(fpMigrateData, "permitivity = %.4f-i %.4f\n", epsr, epsi);
-    fprintf(fpMigrateData, "angular freq = %.4f\t eta = %.4f\t kr = %.4f\t ki = %.4f\n", w, eta, kr, ki);
-    fprintf(fpMigrateData, "k2r = %.4f\t ga2i = %.4f\n", k2r, ga2i);
+#endif
+
+    fprintf(fpMigrateData, "permitivity = %.8f-i %.15f\n", epsr, epsi);
+    fprintf(fpMigrateData, "angular freq = %.8f\t eta = %.8f\t kr = %.8f\t ki = %.8f\n", w, eta, kr, ki);
+    fprintf(fpMigrateData, "k2r = %.8f\t ga2i = %.15f\n", k2r, ga2i);
     fprintf(fpMigrateData, "\n");
     fclose(fpMigrateData);
 }
@@ -141,9 +155,13 @@ static void fprintfBloodData( bloodData**** bD, int zdim, int ydim, int xdim )
 {
     char buf[40];
     int x, y, z;
-
     snprintf(buf, sizeof(buf), "data/modelData/bloodData.txt");
+
+#if ( GNU_LINUX == 1 )
+    fpBloodData = fopen(buf, "w");
+#else
     fopen_s(&fpBloodData, buf, "w");
+#endif
 
     fprintf(fpBloodData, "**** BloodData 3D Geometry ****\n");
     fprintf(fpBloodData, "\n");
@@ -807,7 +825,7 @@ static void propagate(sampData *sD, modelData *mD)
 
                 powerfluxReflected   += (uref[y][2*x] * uref[y][2*x] + uref[y][2*x + 1] * uref[y][2*x + 1]) *
                                         (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) /
-                                        (mD->backRe * initFieldValue * initFieldValue);;
+                                        (mD->backRe * initFieldValue * initFieldValue);
             }
         }
 
@@ -819,7 +837,7 @@ static void propagate(sampData *sD, modelData *mD)
         fprintftransPowerFluxData(powerfluxTransmitted);
 #endif
 
-        printf("z=%d\t Powerflux transmitted=%f\t Powerflux reflected=%f\n",
+        printf("z=%d\t Powerflux transmitted=%.8f\t Powerflux reflected=%.8f\n",
                 z, powerfluxTransmitted, powerfluxReflected);
     }
 
