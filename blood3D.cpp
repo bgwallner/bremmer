@@ -24,30 +24,31 @@
 #define GNU_LINUX              0
 
 /* Choose one angle setup for different simulations */
-#define ANGLES_RANDOM          1
+#define ANGLES_RANDOM          0
 #define ANGLE_THETA_ZERO       0
-#define ANGLE_THETA_PI_HALF    0
+#define ANGLE_THETA_PI_HALF    1
 #define ANGLE_THETA_PI_FOURTH  0
+
+/* Enable backward field */
+#define ENABLE_BREMMER_REFLECTION 0
 
 /* Number of layers to simulate in propagation direction */
 #define SIMULATION_DEPTH       200
 
 /**** Flags for debug output in textfiles ****/
 
-/* Print entire layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE     0
-/* The number of model layers */
-#define NBR_OF_LAYERS_TO_FILE             128
+/* Print multipe layer of RBC to file */
+#define MULTIPLE_LAYER_NUMBER_TO_FILE     128
 /* Print all BloodData to file */
 #define BLOOD_DATA_TO_FILE                1
 /* Print transmitted power */
 #define TRANS_POWER_TO_FILE               1
 /* Print vars in propagate() */
-#define PRINT_MIGRATE_DATA                1
+#define PRINT_MIGRATE_DATA                0
 /* Print vars in migrate() */
 #define PRINT_INTERACTION_DATA            0
 /* Print field absolute to file */
-#define PRINT_ABSOLUTE_FIELD_TO_FILE      0
+#define PRINT_MIGRATED_FIELD_TO_FILE      1
 
 /* File handles */
 static FILE *fpSampleLayer;
@@ -55,10 +56,15 @@ static FILE *fpBloodData;
 static FILE* fpTransPower;
 static FILE* fpInteractionData;
 static FILE* fpMigrateData;
-static FILE* fpAbsoluteField;
+static FILE* fpMigratedField;
 
 /* RBC width in sample points */
-static unsigned int bcWidthInSampPoints;
+static unsigned int rbcWidthInSampPoints;
+
+/* Counters for determing total number of    */
+/* samplepoints within RBC and in Background */
+static unsigned long nbrOfSamplespointsInRbc;
+static unsigned long nbrOfSamplespointsInBackground;
 
 typedef struct
 {
@@ -124,6 +130,32 @@ static void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
         fprintf(fpSampleLayer, "\n");
     }
     fclose(fpSampleLayer);
+}
+
+/* Function prints one migrated field data to file */
+static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
+{
+    int x, y;
+    double absoluteField;
+    char buf[40];
+    snprintf(buf, sizeof(buf), "data/fieldData/migratedfield%d.txt", z);
+
+#if ( GNU_LINUX == 1 )
+    fpMigratedField = fopen(buf, "w");
+#else
+    fopen_s(&fpMigratedField, buf, "w");
+#endif
+
+    for (y = 0; y < sD->yAnt; y++)
+    {
+        for (x = 0; x < sD->xAnt; x++)
+        {
+            absoluteField = field[y][2*x]*field[y][2*x] + field[y][2*x+1]*field[y][2*x+1];
+            fprintf(fpMigratedField, "%.4f\t", sqrt(absoluteField)/ initFieldValue);
+        }
+        fprintf(fpMigratedField, "\n");
+    }
+    fclose(fpMigratedField);
 }
 
 static void fprintMigrateData(double epsr, double epsi, double w, double eta, double kr, 
@@ -241,7 +273,6 @@ static double absolut(double a)
 
 static double random1(double a)
 {
-    //return a*rand()/(1.0*RAND_MAX);
     std::random_device dev;
     std::mt19937 engine(dev());
     std::uniform_real_distribution<double> dist{ 0.0, 1.0 };
@@ -264,7 +295,7 @@ static void fourn_wrapper(MatDoub& u1, int xmax, int ymax, bool inverse)
     nn[2] = xmax;
 
 
-    /* Copy u1[ymax][2*xmax] to v1[2*xmax*ymax] */
+    /* Copy u1[ymax][2*xmax] -> v1[2*xmax*ymax] */
     i = 0;
     for (y = 0; y < ymax; y++)
     {
@@ -274,8 +305,8 @@ static void fourn_wrapper(MatDoub& u1, int xmax, int ymax, bool inverse)
             v1[i + 1] = u1[y][x + 1];
             i += 2;
 
-            /* Test */
-            if (v1[i] > 1 || v1[i + 1] > 1)
+            /* DEBUG test */
+            if (v1[i] > initFieldValue || v1[i + 1] > initFieldValue)
             {
                 stop = true;
             }
@@ -293,7 +324,7 @@ static void fourn_wrapper(MatDoub& u1, int xmax, int ymax, bool inverse)
         fourn(v1, nn, -1);
     }
 
-    /* Copy back contents from v1[2*xmax*ymax] to u1[ymax][2*xmax] */
+    /* Copy back contents from v1[2*xmax*ymax] -> u1[ymax][2*xmax] */
     i = 0;
     for (y = 0; y < ymax; y++)
     {
@@ -305,8 +336,8 @@ static void fourn_wrapper(MatDoub& u1, int xmax, int ymax, bool inverse)
                 u1[y][x] = v1[i] / (xmax * ymax);
                 u1[y][x + 1] = v1[i + 1] / (xmax * ymax);
 
-                /* Test */
-                if (u1[y][x] > 1 || u1[y][x+1] > 1)
+                /* DEBUG test */
+                if (u1[y][x] > initFieldValue || u1[y][x+1] > initFieldValue)
                 {
                     stop = true;
                 }
@@ -477,7 +508,7 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             /* described as: D(x) = Sqrt(1-(x/R0)^2) * (C0+C2*(x/R0)^2+C4*(x/R0)^4))        */
             /* where C0=0.81um, C2=7.83um, C4=-4.39um and R0=3.91um and this corresponds    */
             /* to a biconcave disk with diameter a=7.76um and max thickness b=2.55um.       */
-            /* Thus, the a=7.76um shall correspond to bcWidthInSampPoints samplepoints.     */
+            /* Thus, the a=7.76um shall correspond to rbcWidthInSampPoints samplepoints.    */
             /* We apply the following tranformations: x -> Sqrt(xe^2+ye^2) and for D(x)     */
             /* we set D(x)^2 -> (2ze)^2 = 4*ze^2. This give a 3D expression and we can use  */
             /* 4*ze^2 - (1-(Re/R0)^2) * (C0+C2*(Re/R0)^2+C4*(Re/R0)^4))^2 > 0 and if        */
@@ -503,7 +534,7 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
 
             /* Check if (xe,ye) is within disk since expression only valid within */
             /* it and that exclude e.g. corners of the cell.                      */
-            if(Re < bcWidthInSampPoints/2)
+            if(Re < rbcWidthInSampPoints/2)
             {
                 /* Re is valid to use in the expression */
                 D_xDiff = 4*pow(ze,2) - (1-pow(Re/R0,2)) * pow(C0 + C2*pow(Re/R0,2) + C4*pow(Re/R0,4), 2);
@@ -512,24 +543,27 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
                 {
                     /* ze is outside the disk */
                     geometry2D[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
+                    nbrOfSamplespointsInBackground++;
                 }
                 else
                 {
                 /* ze is within the biconcave disk */
                     geometry2D[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 1;
+                    nbrOfSamplespointsInRbc++;
                 }
             }
             else
             {
                /* Re is outside the disk */
                 geometry2D[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
+                nbrOfSamplespointsInBackground++;
             }
         }
     }
 
-#if ( MULTIPLE_LAYER_NUMBER_TO_FILE)
-    /* Print layers 0->NBR_OF_LAYERS_TO_FILE to files */
-    if (z < NBR_OF_LAYERS_TO_FILE)
+#if ( MULTIPLE_LAYER_NUMBER_TO_FILE > 0)
+    /* Print layers 0->MULTIPLE_LAYER_NUMBER_TO_FILE to files */
+    if (z < MULTIPLE_LAYER_NUMBER_TO_FILE)
     {
         fprintfsampData(sD, geometry2D, z);
     }
@@ -813,8 +847,10 @@ static void propagate(sampData *sD, modelData *mD)
         /* Migrate between the two layers */
         migrate(sD, mD, sampleLayer1, umig);
         
+#if ( ENABLE_BREMMER_REFLECTION == 1)
         /* Calculate interaction between two layers */
-        //interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
+        interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
+#endif
 
         /* Calculate powerflux in z by summing over x-y plane */
         powerfluxTransmitted = 0.0;
@@ -838,6 +874,10 @@ static void propagate(sampData *sD, modelData *mD)
         powerfluxTransmitted = powerfluxTransmitted /(sD->xAnt*sD->yAnt);
         powerfluxReflected   = powerfluxReflected / (sD->xAnt * sD->yAnt);
 
+#if (PRINT_MIGRATED_FIELD_TO_FILE == 1)
+        fprintfMigratedFieldData(sD, umig, z);
+#endif
+
 #if (TRANS_POWER_TO_FILE == 1)
         fprintftransPowerFluxData(powerfluxTransmitted);
 #endif
@@ -845,8 +885,6 @@ static void propagate(sampData *sD, modelData *mD)
         printf("z=%d\t Powerflux transmitted=%.8f\t Powerflux reflected=%.8f\n",
                 z, powerfluxTransmitted, powerfluxReflected);
     }
-
-    printf("Program Exit. \n");
 }
 
 /************************************************/
@@ -854,7 +892,7 @@ int main(void)
 {
     sampData sD;
     modelData mD;
-    double lambda;
+    double lambda, volfrac, eps_average;
 
     /* Sample points for all model */	
     sD.xAnt = 1024; /* first transverse direction  */
@@ -873,17 +911,21 @@ int main(void)
 
     /* Number of iterations for "smoothing" */
     sD.iAnt = 2;
-        
+
+    /* Init variables for counting occurences */
+    /* in RBC vs background                   */
+    nbrOfSamplespointsInRbc = 0;
+    nbrOfSamplespointsInBackground = 0;
         
     /* Field data */
 
-    /* RBC max size 7.76 um is equivalent to bcWidthInSampPoints */
+    /* RBC max size 7.76 um is equivalent to rbcWidthInSampPoints*/
     /* lambda = 632.8 nm = (sD.xbox/7.76)*0.6328 s.p             */
 
-    bcWidthInSampPoints = sD.xbox;               /* RBC width                          */
-    lambda = (bcWidthInSampPoints/7.76)*0.6328;  /* Sample points                      */
-    mD.afreq = 2*pi/lambda;                      /* angular frequency c^{-1} s^{-1}    */
-    mD.epsilonRe = 1.977;                        /* Re permittivity RBC                */
+    rbcWidthInSampPoints = sD.xbox;               /* RBC width                          */
+    lambda = (rbcWidthInSampPoints/7.76)*0.6328;  /* Sample points                      */
+    mD.afreq = 2*pi/lambda;                       /* angular frequency c^{-1} s^{-1}    */
+    mD.epsilonRe = 1.977;                         /* Re permittivity RBC                */
 
     /* Value chosen according to "Simulations of light scattering from a biconcave     */ 
     /* red blood cell using the finite-differencetime-domain method" by Jun Q. Lu for  */
@@ -897,6 +939,18 @@ int main(void)
 
     /* Model contains 2D layer with ALL samplepoints */
     propagate( &sD, &mD );
+
+    volfrac = nbrOfSamplespointsInRbc/(nbrOfSamplespointsInRbc + nbrOfSamplespointsInBackground);
+    eps_average = (mD.epsilonRe * nbrOfSamplespointsInRbc + mD.backRe * nbrOfSamplespointsInBackground) /
+        (nbrOfSamplespointsInRbc + nbrOfSamplespointsInBackground);
+        
+        
+
+    /* Calculate volume fraction RBC vs background and weighted average of permitivity seen */
+    printf("Volumefraction RBC vs background:%.4f\n", volfrac);
+    printf("Average permitivity realpart:%.4f\n", eps_average);
+
+    printf("Program Exit. \n");
 
 }
 /**********************************************************/
