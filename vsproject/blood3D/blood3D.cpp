@@ -18,15 +18,15 @@
 #define twopi                  6.283185307177959
 #define pi                     3.14159265358
 #define max32bit               4294967295
-#define initFieldValue         1000.0
+#define initFieldValue         1.0
 
 /* Development environment */
 #define GNU_LINUX              0
 
 /* Choose one angle setup for different simulations */
-#define ANGLES_RANDOM          0
+#define ANGLES_RANDOM          1
 #define ANGLE_THETA_ZERO       0
-#define ANGLE_THETA_PI_HALF    1
+#define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
 
 /* Enable backward field */
@@ -40,15 +40,15 @@
 /* Print multipe layer of RBC to file */
 #define MULTIPLE_LAYER_NUMBER_TO_FILE     128
 /* Print all BloodData to file */
-#define BLOOD_DATA_TO_FILE                1
+#define BLOOD_DATA_TO_FILE                0
 /* Print transmitted power */
-#define TRANS_POWER_TO_FILE               1
+#define TRANS_POWER_TO_FILE               0
 /* Print vars in propagate() */
 #define PRINT_MIGRATE_DATA                0
 /* Print vars in migrate() */
 #define PRINT_INTERACTION_DATA            0
 /* Print field absolute to file */
-#define PRINT_MIGRATED_FIELD_TO_FILE      1
+#define PRINT_MIGRATED_FIELD_TO_FILE      0
 
 /* File handles */
 static FILE *fpSampleLayer;
@@ -929,8 +929,8 @@ int main(void)
 
     /* Value chosen according to "Simulations of light scattering from a biconcave     */ 
     /* red blood cell using the finite-differencetime-domain method" by Jun Q. Lu for  */
-    /* lambda = 700nm -> ni = 4.3*10^-6 -> ei = 1.849*10^-11                           */
-    mD.epsilonIm = 0.00000000001849;             /* Im permittivity */
+    /* lambda = 700nm -> ni = 4.3*10^-6 -> ei = 2*nr*ni = 1.20916*10^-5                */
+    mD.epsilonIm = 0.0000120916;                 /* Im permittivity */
     mD.backRe = 1.809;
     mD.backIm = 0.0;
 
@@ -947,7 +947,7 @@ int main(void)
         
 
     /* Calculate volume fraction RBC vs background and weighted average of permitivity seen */
-    printf("Volumefraction RBC vs background:%.4f\n", volfrac);
+    printf("Volumefraction RBC vs background:%.4f percent\n", volfrac*100);
     printf("Average permitivity realpart:%.4f\n", eps_average);
 
     printf("Program Exit. \n");
