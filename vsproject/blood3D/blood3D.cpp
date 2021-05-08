@@ -581,6 +581,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     double ii;
     double epsr, epsi, ga2r, ga2i, gar, gai, kr, ki, k2r;
     int x, i, y, pr=0, ev=0;
+    int imMax, reMax;
 
     /* Create sD.iAnt number of vectors */
     vector<MatDoub> v1(sD->iAnt);
@@ -607,35 +608,90 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     /* Calculate FFT for the input field */
     fourn_wrapper( u1, xmax, ymax, false );
 
-    eta=0.0;
+    eta=0.0; /* is OK with 0.0 */
     for ( i=0; i<imax; i++ )
     {   /*interpolation slowness */
         s = smin + i*(smax-smin)/(imax-1);                                    /* slowness */
         epsr = (mD->backRe + s * (mD->epsilonRe - mD->backRe)) / mD->backRe;  /* Re permittivity, min = mD->back, max = mD->epsilonRe */
         epsi = s* mD->epsilonIm;                                              /* Im permittivity*/
-        compmult(eta, w, eta, w, &kr, &ki);                                   /* wave number (eta + i*w)^2, c^{-1} s */
+        compmult(eta, w, eta, w, &kr, &ki);                                   /* wave number, c^{-1} s */
         compmult(kr, ki, epsr, epsi, &k2r, &ga2i);                            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
 
 #if ( PRINT_MIGRATE_DATA == 1 )
         fprintMigrateData(epsr, epsi, w, eta, kr, ki, k2r, ga2i);
 #endif
 
-        /* Iterate over the geometry {ymax * xmax}, important that     */
-        /* wavenumbers etc are calculated over geometry and thus       */
-        /* inner-loop cannot be chosen with "field"-index 0...2*xmax-1 */
-        for ( y=0; y<ymax; y++ )
+        /* For ordering from fourn() see Numerical recipes users guide   */
+        /* which gives separate cases of y=0 and y=ymax/2. All comments  */
+        /* given for xmax=ymax=1024 but calculations not restricted to   */
+        /* these ranges.                                                 */
+
+        /* Start indexes for array-indexes going "backwards" */
+        imMax = 2*xmax-1; /* If xmax=1024 -> 2047 */
+        reMax = 2*xmax-2; /* If xmax=1024 -> 2046*/
+
+        /************* Handle the 0 frequency ************/
+        y = 0;
+        xiY = y/(ymax*dy)*twopi;       /* transverse wavenumber */
+        /* x=0..1022 */
+        for (x = 0; x < xmax; x += 2)
+        {
+            xiX = x / (xmax * 2.0 * dx) * twopi; /* transverse wavenumber */
+            ga2r = k2r + xiX * xiX + xiY * xiY;
+            compsqrt(ga2r, ga2i, &gar, &gai);
+            propr = cos(-dz * gai) * exp(-dz * gar);
+            propi = sin(-dz * gai) * exp(-dz * gar);
+            /* xmax=1024 -> u[0][0], u[0][1] ... u[0][1022], u[0][1023] */
+            compmult(propr, propi, u1[y][x], u1[y][x+1], &v1[i][y][x], &v1[i][y][x+1]);
+            /* xmax=1024 -> u[0][2046], u[0][2047] ... u[0][1024], u[0][1025] */
+            compmult(propr, propi, u1[y][reMax-x], u1[y][imMax-x], &v1[i][y][reMax-x], &v1[i][y][imMax-x]);
+        }
+        /********** END - Handle the 0 frequency *********/
+
+        /********** Handle the mid +/- frequency *********/
+        y = ymax/2;
+        xiY = y/(ymax*dy)*twopi;       /* transverse wavenumber */
+        /* x=0..1022 */
+        for (x = 0; x < xmax; x += 2)
+        {
+            xiX = x / (xmax * 2.0 * dx) * twopi; /* transverse wavenumber */
+            ga2r = k2r + xiX * xiX + xiY * xiY;
+            compsqrt(ga2r, ga2i, &gar, &gai);
+            propr = cos(-dz * gai) * exp(-dz * gar);
+            propi = sin(-dz * gai) * exp(-dz * gar);
+            /* xmax=1024 -> u[512][0], u[512][1] ... u[512][1022], u[512][1023] */
+            compmult(propr, propi, u1[y][x], u1[y][x + 1], &v1[i][y][x], &v1[i][y][x + 1]);
+            /* xmax=1024 -> u[512][2046], u[512][2047] ... u[512][1024], u[512][1025] */
+            compmult(propr, propi, u1[y][reMax - x], u1[y][imMax - x], &v1[i][y][reMax - x], &v1[i][y][imMax - x]);
+        }
+        /******* END - Handle the mid +/- frequency ******/
+
+        /******** Handle all other frequencys ************/
+        /* y = 1..511 */
+        for ( y=1; y<ymax/2; y++ )
         {
             xiY = y/(ymax*dy)*twopi;                 /* transverse wavenumber */
 
-            /* If xmax=1024 -> x=0,1,...,1023 -> max{2x+1} = 2*1023+1 = 2047  */
-            for (x=0; x<xmax; x++)
+            /* x=0..1022 */
+            for (x = 0; x < xmax; x += 2)
             {
-                xiX = x/(xmax*2.0*dx)*twopi;         /* transverse wavenumber */
-                ga2r = k2r + xiX*xiX + xiY*xiY;
+                xiX = x / (xmax * 2.0 * dx) * twopi; /* transverse wavenumber */
+                ga2r = k2r + xiX * xiX + xiY * xiY;
                 compsqrt(ga2r, ga2i, &gar, &gai);
-                propr = cos(-dz*gai) * exp(-dz*gar);
-                propi = sin(-dz*gai) * exp(-dz*gar);
-                compmult(propr, propi, u1[y][2*x], u1[y][2*x+1], &v1[i][y][2*x], &v1[i][y][2*x+1]);
+                propr = cos(-dz * gai) * exp(-dz * gar);
+                propi = sin(-dz * gai) * exp(-dz * gar);
+
+                /* Handle y array-index 1-511 */
+                /* xmax=1024 -> u[y][0], u[y][1] ... u[y][1022], u[y][1023] */
+                compmult(propr, propi, u1[y][x], u1[y][x+1], &v1[i][y][x], &v1[i][y][x+1]);
+                /* xmax=1024 -> u[y][2046], u[y][2047] ... u[y][1024], u[y][1025] */
+                compmult(propr, propi, u1[y][reMax-x], u1[y][imMax-x], &v1[i][y][reMax-x], &v1[i][y][imMax-x]);
+
+                /* Handle y array-index ymax-1=1023...513. ymax/2=512 separately handled above! */
+                /* xmax=1024 -> u[ymax-y][0], u[ymax-y][1] ... u[ymax-y][1022], u[ymax-y][1023] */
+                compmult(propr, propi, u1[ymax-y][x], u1[ymax-y][x+1], &v1[i][ymax-y][x], &v1[i][ymax-y][x+1]);
+                /* xmax=1024 -> u[ymax-y][2046], u[ymax-y][2047] ... u[ymax-y][1024], u[ymax-y][1025] */
+                compmult(propr, propi, u1[ymax-y][reMax-x], u1[ymax-y][imMax-x], &v1[i][ymax-y][reMax-x], &v1[i][ymax-y][imMax-x]);
             }
         }
 
