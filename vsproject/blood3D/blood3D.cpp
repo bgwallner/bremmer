@@ -23,6 +23,10 @@
 /* Development environment */
 #define GNU_LINUX              0
 
+/* Transversal size 2^N */
+#define MODEL_TRANSVERSAL_SIZE 1024
+#define MODEL_DEPTH_SIZE       1024
+
 /* Choose one angle setup for different simulations */
 #define ANGLES_RANDOM          1
 #define ANGLE_THETA_ZERO       0
@@ -33,22 +37,24 @@
 #define ENABLE_BREMMER_REFLECTION 0
 
 /* Number of layers to simulate in propagation direction */
-#define SIMULATION_DEPTH       200
+#define SIMULATION_DEPTH       1020
 
 /**** Flags for debug output in textfiles ****/
 
 /* Print multipe layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE     128
+#define MULTIPLE_LAYER_NUMBER_TO_FILE       128
 /* Print all BloodData to file */
-#define BLOOD_DATA_TO_FILE                0
+#define BLOOD_DATA_TO_FILE                  0
 /* Print transmitted power */
-#define TRANS_POWER_TO_FILE               0
+#define TRANS_POWER_TO_FILE                 1
 /* Print vars in propagate() */
-#define PRINT_MIGRATE_DATA                0
+#define PRINT_MIGRATE_DATA                  0           
 /* Print vars in migrate() */
-#define PRINT_INTERACTION_DATA            0
+#define PRINT_INTERACTION_DATA              0
 /* Print field absolute to file */
-#define PRINT_MIGRATED_FIELD_TO_FILE      0
+#define PRINT_MIGRATED_FIELD_TO_FILE        0
+/* Print field every every N:th layer */
+#define PRINT_FIELD_EVERY_NTH_LAYER         4
 
 /* File handles */
 static FILE *fpSampleLayer;
@@ -613,7 +619,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     {   /*interpolation slowness */
         s = smin + i*(smax-smin)/(imax-1);                                    /* slowness */
         epsr = (mD->backRe + s * (mD->epsilonRe - mD->backRe)) / mD->backRe;  /* Re permittivity, min = mD->back, max = mD->epsilonRe */
-        epsi = s* mD->epsilonIm;                                              /* Im permittivity*/
+        epsi = -s* mD->epsilonIm;                                              /* Im permittivity*/
         compmult(eta, w, eta, w, &kr, &ki);                                   /* wave number, c^{-1} s */
         compmult(kr, ki, epsr, epsi, &k2r, &ga2i);                            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
 
@@ -931,7 +937,10 @@ static void propagate(sampData *sD, modelData *mD)
         powerfluxReflected   = powerfluxReflected / (sD->xAnt * sD->yAnt);
 
 #if (PRINT_MIGRATED_FIELD_TO_FILE == 1)
+	if( (z % PRINT_FIELD_EVERY_NTH_LAYER) == 0)
+	{
         fprintfMigratedFieldData(sD, umig, z);
+	}
 #endif
 
 #if (TRANS_POWER_TO_FILE == 1)
@@ -951,10 +960,10 @@ int main(void)
     double lambda, volfrac, eps_average;
 
     /* Sample points for all model */	
-    sD.xAnt = 1024; /* first transverse direction  */
-    sD.yAnt = 1024; /* second transverse direction */
-    sD.zAnt = 1024; /* depth                       */
-    sD.dx = 1;      /* depth step                  */
+    sD.xAnt = MODEL_TRANSVERSAL_SIZE; /* first transverse direction  */
+    sD.yAnt = MODEL_TRANSVERSAL_SIZE; /* second transverse direction */
+    sD.zAnt = MODEL_DEPTH_SIZE;       /* depth                       */
+    sD.dx = 1;                        /* depth step                  */
     sD.dy = 1;
     sD.dz = 1;
         
@@ -966,7 +975,7 @@ int main(void)
     sD.zbox = sD.zAnt / 8;
 
     /* Number of iterations for "smoothing" */
-    sD.iAnt = 2;
+    sD.iAnt = 3;
 
     /* Init variables for counting occurences */
     /* in RBC vs background                   */
@@ -996,7 +1005,7 @@ int main(void)
     /* Model contains 2D layer with ALL samplepoints */
     propagate( &sD, &mD );
 
-    volfrac = nbrOfSamplespointsInRbc/(nbrOfSamplespointsInRbc + nbrOfSamplespointsInBackground);
+    volfrac = 1.0*nbrOfSamplespointsInRbc/(nbrOfSamplespointsInRbc + nbrOfSamplespointsInBackground);
     eps_average = (mD.epsilonRe * nbrOfSamplespointsInRbc + mD.backRe * nbrOfSamplespointsInBackground) /
         (nbrOfSamplespointsInRbc + nbrOfSamplespointsInBackground);
         
