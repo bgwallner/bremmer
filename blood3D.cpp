@@ -34,7 +34,7 @@
 #define ANGLE_THETA_PI_FOURTH  0
 
 /* Enable backward field */
-#define ENABLE_BREMMER_REFLECTION 0
+#define ENABLE_BREMMER_REFLECTION 1
 
 /* Number of layers to simulate in propagation direction */
 #define SIMULATION_DEPTH       1020
@@ -49,8 +49,6 @@
 #define TRANS_POWER_TO_FILE                 1
 /* Print vars in propagate() */
 #define PRINT_MIGRATE_DATA                  0           
-/* Print vars in migrate() */
-#define PRINT_INTERACTION_DATA              0
 /* Print field absolute to file */
 #define PRINT_MIGRATED_FIELD_TO_FILE        0
 /* Print field every every N:th layer */
@@ -701,6 +699,8 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
             }
         }
 
+		/******** END - Handle all other frequencys ******/
+
         /* Make inverse FFT */
         fourn_wrapper(v1[i], xmax, ymax, true);
 
@@ -754,8 +754,11 @@ static void interaction( sampData *sD, modelData *mD,
     double bsr, bsi, bkr, bki, bk2r, bgar, bgai, bga2r, bga2i;
     double refr, refi, xiX, xiY;
     int x, y, refl=0;
+	int reMax, imMax;
 
     MatInt refp(ymax, xmax);
+	/* Checks whether RBC->Background or Background->RBC */
+	/* Essentially refl=1 most of the time.              */
     for (y=0; y<ymax; y++)
     {
         for (x=0; x<xmax; x++)
@@ -763,11 +766,13 @@ static void interaction( sampData *sD, modelData *mD,
             refp[y][x] = 0;
             if (slow1[y][x]-slow2[y][x] > 0.5)
             {
+				/* RBC -> Background */
                 refp[y][x] = 1;
                 refl = 1;
             }
             else if (slow2[y][x]-slow1[y][x] > 0.5)
             {
+				/* Background->RBC */
                 refp[y][x] = -1;
                 refl = 1;
             }
@@ -777,14 +782,12 @@ static void interaction( sampData *sD, modelData *mD,
     /* Length is "ymax x 2*xmax" */
     if (refl == 1) 
     {
-        y = 0;
-        
         /* Transform in-field */
         fourn_wrapper( uin, xmax, ymax, false );     /* spatial FFT */
         
         /* Set permitivity */
-        epsr = (mD->backRe + (mD->epsilonRe - mD->backRe)) / mD->backRe; /* Re permittivity */
-        epsi = mD->epsilonIm;                                            /* Im permittivity*/
+        epsr = (mD->backRe + 1.0 * (mD->epsilonRe - mD->backRe)) / mD->backRe; /* Re permittivity, min = mD->back, max = mD->epsilonRe */
+        epsi = -mD->epsilonIm;                                                 /* Im permittivity*/
 
         /* Compute wavenumber for cells */
         compmult(eta, w, eta, w, &kr, &ki);           /* wavenumber, c^{-1} s */
@@ -798,19 +801,65 @@ static void interaction( sampData *sD, modelData *mD,
         compmult(bsr, bsi, eta, w, &bkr, &bki);       /* wavenumber, c^{-1} s */
         compmult(bkr, bki, bkr, bki, &bk2r, &bga2i);  /* sqr wavenumber, .^{2} */
 
-        xiY = 0.0;
-        xiX = 0.0;                                    /* zero transverse wave number */
-        ga2r = k2r + xiX*xiX + xiY*xiY;
-        compsqrt(ga2r, ga2i, &gar, &gai);
-        bga2r = bk2r + xiX*xiX + xiY*xiY;
-        compsqrt(bga2r, bga2i, &bgar, &bgai);
-        compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
+        /* For ordering from fourn() see Numerical recipes users guide   */
+        /* which gives separate cases of y=0 and y=ymax/2. All comments  */
+        /* given for xmax=ymax=1024 but calculations not restricted to   */
+        /* these ranges.                                                 */
 
-        for (y=0; y<ymax; y++) 
+        /* Start indexes for array-indexes going "backwards" */
+        imMax = 2*xmax-1; /* If xmax=1024 -> 2047 */
+        reMax = 2*xmax-2; /* If xmax=1024 -> 2046*/
+
+        /************* Handle the 0 frequency ************/
+        y = 0;
+        xiY = y/(ymax*dy)*twopi;       /* transverse wavenumber */
+        /* x=0..1022 */
+        for (x = 0; x < xmax; x += 2)
+        {
+            xiX = x / (xmax * 2.0 * dx) * twopi; /* transverse wavenumber */
+            ga2r = k2r + xiX * xiX + xiY * xiY;
+            compsqrt(ga2r, ga2i, &gar, &gai);
+
+			bga2r = bk2r + xiX*xiX + xiY*xiY;
+            compsqrt(bga2r, bga2i, &bgar, &bgai);
+            compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
+
+            /* xmax=1024 -> u[0][0], u[0][1] ... u[0][1022], u[0][1023] */
+            compmult(refr, refi, uin[y][x], uin[y][x+1], &urefl[y][x], &urefl[y][x+1]);
+            /* xmax=1024 -> u[0][2046], u[0][2047] ... u[0][1024], u[0][1025] */
+            compmult(refr, refi, uin[y][reMax-x], uin[y][imMax-x], &urefl[y][reMax-x], &urefl[y][imMax-x]);
+        }
+        /********** END - Handle the 0 frequency *********/
+
+		/********** Handle the mid +/- frequency *********/
+        y = y = ymax/2;
+        xiY = y/(ymax*dy)*twopi;       /* transverse wavenumber */
+        /* x=0..1022 */
+        for (x = 0; x < xmax; x += 2)
+        {
+            xiX = x / (xmax * 2.0 * dx) * twopi; /* transverse wavenumber */
+            ga2r = k2r + xiX * xiX + xiY * xiY;
+            compsqrt(ga2r, ga2i, &gar, &gai);
+
+			bga2r = bk2r + xiX*xiX + xiY*xiY;
+            compsqrt(bga2r, bga2i, &bgar, &bgai);
+            compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
+
+            /* xmax=1024 -> u[0][0], u[0][1] ... u[0][1022], u[0][1023] */
+            compmult(refr, refi, uin[y][x], uin[y][x+1], &urefl[y][x], &urefl[y][x+1]);
+            /* xmax=1024 -> u[0][2046], u[0][2047] ... u[0][1024], u[0][1025] */
+            compmult(refr, refi, uin[y][reMax-x], uin[y][imMax-x], &urefl[y][reMax-x], &urefl[y][imMax-x]);
+        }
+		/******* END - Handle the mid +/- frequency ******/
+
+
+        /******** Handle all other frequencys ************/
+        /* y = 1..511 */
+        for ( y=1; y<ymax/2; y++ )
         {
             xiY = y / (ymax * dy) * twopi;
 
-            for (x=0; x<xmax; x++)
+            for (x = 0; x < xmax; x += 2)
             {
                 xiX = x/(xmax*2.0*dx)*twopi;
                 ga2r = k2r + xiX*xiX + xiY*xiY;
@@ -820,11 +869,20 @@ static void interaction( sampData *sD, modelData *mD,
                 compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
                 compmult(refr, refi, uin[y][2*x], uin[y][2*x+1], &urefl[y][2*x], &urefl[y][2*x+1]); /* reflected field, ur = R*uin */
 
-#if ( PRINT_INTERACTION_DATA == 1 )
-                fprintInteractionData(x, y, epsr, epsi, w, eta, kr, ki, k2r, ga2i, bk2t, bga2i, gar, gai, bgar, bgai);
-#endif
+				/* Handle y array-index 1-511 */
+				/* xmax=1024 -> u[y][0], u[y][1] ... u[y][1022], u[y][1023] */
+				compmult(refr, refi, uin[y][x], uin[y][x+1], &urefl[y][x], &urefl[y][x+1]);
+				/* xmax=1024 -> u[y][2046], u[y][2047] ... u[y][1024], u[y][1025] */
+				compmult(refr, refi, uin[y][reMax-x], uin[y][imMax-x], &urefl[y][reMax-x], &urefl[y][imMax-x]);
+
+				/* Handle y array-index ymax-1=1023...513. ymax/2=512 separately handled above! */
+				/* xmax=1024 -> u[ymax-y][0], u[ymax-y][1] ... u[ymax-y][1022], u[ymax-y][1023] */
+				compmult(refr, refi, uin[ymax-y][x], uin[ymax-y][x+1], &urefl[ymax-y][x], &urefl[ymax-y][x+1]);
+				/* xmax=1024 -> u[ymax-y][2046], u[ymax-y][2047] ... u[ymax-y][1024], u[ymax-y][1025] */
+				compmult(refr, refi, uin[ymax-y][reMax-x], uin[ymax-y][imMax-x], &urefl[ymax-y][reMax-x], &urefl[ymax-y][imMax-x]);
             }
         }
+        /******** END - Handle all other frequencys ******/
 
         fourn_wrapper( urefl, xmax, ymax, true ); /* inverse spatial FFT */
         fourn_wrapper( uin, xmax, ymax, true );
@@ -844,7 +902,8 @@ static void interaction( sampData *sD, modelData *mD,
     {
         for (y=0; y<ymax; y++)
         {
-                for (x=0; x<xmax; x++){
+			for (x=0; x<xmax; x++)
+			{
                 urefl[y][2*x] =   0.0; /* transmitted field, ut=T*uin = (1+R) uin */
                 urefl[y][2*x+1] = 0.0;
             }
