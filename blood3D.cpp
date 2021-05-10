@@ -699,7 +699,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
             }
         }
 
-		/******** END - Handle all other frequencys ******/
+        /******** END - Handle all other frequencys ******/
 
         /* Make inverse FFT */
         fourn_wrapper(v1[i], xmax, ymax, true);
@@ -754,11 +754,11 @@ static void interaction( sampData *sD, modelData *mD,
     double bsr, bsi, bkr, bki, bk2r, bgar, bgai, bga2r, bga2i;
     double refr, refi, xiX, xiY;
     int x, y, refl=0;
-	int reMax, imMax;
+    int reMax, imMax;
 
     MatInt refp(ymax, xmax);
-	/* Checks whether RBC->Background or Background->RBC */
-	/* Essentially refl=1 most of the time.              */
+    /* Checks whether RBC->Background or Background->RBC */
+    /* Essentially refl=1 most of the time.              */
     for (y=0; y<ymax; y++)
     {
         for (x=0; x<xmax; x++)
@@ -766,13 +766,13 @@ static void interaction( sampData *sD, modelData *mD,
             refp[y][x] = 0;
             if (slow1[y][x]-slow2[y][x] > 0.5)
             {
-				/* RBC -> Background */
+                /* RBC -> Background */
                 refp[y][x] = 1;
                 refl = 1;
             }
             else if (slow2[y][x]-slow1[y][x] > 0.5)
             {
-				/* Background->RBC */
+                /* Background->RBC */
                 refp[y][x] = -1;
                 refl = 1;
             }
@@ -820,7 +820,7 @@ static void interaction( sampData *sD, modelData *mD,
             ga2r = k2r + xiX * xiX + xiY * xiY;
             compsqrt(ga2r, ga2i, &gar, &gai);
 
-			bga2r = bk2r + xiX*xiX + xiY*xiY;
+            bga2r = bk2r + xiX*xiX + xiY*xiY;
             compsqrt(bga2r, bga2i, &bgar, &bgai);
             compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
 
@@ -831,7 +831,7 @@ static void interaction( sampData *sD, modelData *mD,
         }
         /********** END - Handle the 0 frequency *********/
 
-		/********** Handle the mid +/- frequency *********/
+        /********** Handle the mid +/- frequency *********/
         y = ymax/2;
         xiY = y/(ymax*dy)*twopi;       /* transverse wavenumber */
         /* x=0..1022 */
@@ -841,7 +841,7 @@ static void interaction( sampData *sD, modelData *mD,
             ga2r = k2r + xiX * xiX + xiY * xiY;
             compsqrt(ga2r, ga2i, &gar, &gai);
 
-			bga2r = bk2r + xiX*xiX + xiY*xiY;
+            bga2r = bk2r + xiX*xiX + xiY*xiY;
             compsqrt(bga2r, bga2i, &bgar, &bgai);
             compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
 
@@ -850,7 +850,7 @@ static void interaction( sampData *sD, modelData *mD,
             /* xmax=1024 -> u[0][2046], u[0][2047] ... u[0][1024], u[0][1025] */
             compmult(refr, refi, uin[y][reMax-x], uin[y][imMax-x], &urefl[y][reMax-x], &urefl[y][imMax-x]);
         }
-		/******* END - Handle the mid +/- frequency ******/
+        /******* END - Handle the mid +/- frequency ******/
 
 
         /******** Handle all other frequencys ************/
@@ -869,17 +869,17 @@ static void interaction( sampData *sD, modelData *mD,
                 compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
                 //compmult(refr, refi, uin[y][2*x], uin[y][2*x+1], &urefl[y][2*x], &urefl[y][2*x+1]);
 
-				/* Handle y array-index 1-511 */
-				/* xmax=1024 -> u[y][0], u[y][1] ... u[y][1022], u[y][1023] */
-				compmult(refr, refi, uin[y][x], uin[y][x+1], &urefl[y][x], &urefl[y][x+1]);
-				/* xmax=1024 -> u[y][2046], u[y][2047] ... u[y][1024], u[y][1025] */
-				compmult(refr, refi, uin[y][reMax-x], uin[y][imMax-x], &urefl[y][reMax-x], &urefl[y][imMax-x]);
+                /* Handle y array-index 1-511 */
+                /* xmax=1024 -> u[y][0], u[y][1] ... u[y][1022], u[y][1023] */
+                compmult(refr, refi, uin[y][x], uin[y][x+1], &urefl[y][x], &urefl[y][x+1]);
+                /* xmax=1024 -> u[y][2046], u[y][2047] ... u[y][1024], u[y][1025] */
+                compmult(refr, refi, uin[y][reMax-x], uin[y][imMax-x], &urefl[y][reMax-x], &urefl[y][imMax-x]);
 
-				/* Handle y array-index ymax-1=1023...513. ymax/2=512 separately handled above! */
-				/* xmax=1024 -> u[ymax-y][0], u[ymax-y][1] ... u[ymax-y][1022], u[ymax-y][1023] */
-				compmult(refr, refi, uin[ymax-y][x], uin[ymax-y][x+1], &urefl[ymax-y][x], &urefl[ymax-y][x+1]);
-				/* xmax=1024 -> u[ymax-y][2046], u[ymax-y][2047] ... u[ymax-y][1024], u[ymax-y][1025] */
-				compmult(refr, refi, uin[ymax-y][reMax-x], uin[ymax-y][imMax-x], &urefl[ymax-y][reMax-x], &urefl[ymax-y][imMax-x]);
+                /* Handle y array-index ymax-1=1023...513. ymax/2=512 separately handled above! */
+                /* xmax=1024 -> u[ymax-y][0], u[ymax-y][1] ... u[ymax-y][1022], u[ymax-y][1023] */
+                compmult(refr, refi, uin[ymax-y][x], uin[ymax-y][x+1], &urefl[ymax-y][x], &urefl[ymax-y][x+1]);
+                /* xmax=1024 -> u[ymax-y][2046], u[ymax-y][2047] ... u[ymax-y][1024], u[ymax-y][1025] */
+                compmult(refr, refi, uin[ymax-y][reMax-x], uin[ymax-y][imMax-x], &urefl[ymax-y][reMax-x], &urefl[ymax-y][imMax-x]);
             }
         }
         /******** END - Handle all other frequencys ******/
@@ -902,8 +902,8 @@ static void interaction( sampData *sD, modelData *mD,
     {
         for (y=0; y<ymax; y++)
         {
-			for (x=0; x<xmax; x++)
-			{
+            for (x=0; x<xmax; x++)
+            {
                 urefl[y][2*x] =   0.0; /* transmitted field, ut=T*uin = (1+R) uin */
                 urefl[y][2*x+1] = 0.0;
             }
@@ -1020,10 +1020,10 @@ static void propagate(sampData *sD, modelData *mD)
         intensityTransmitted = intensityTransmitted - intensityReflected;
 
 #if (PRINT_MIGRATED_FIELD_TO_FILE == 1)
-	if( (z % PRINT_FIELD_EVERY_NTH_LAYER) == 0)
-	{
+    if( (z % PRINT_FIELD_EVERY_NTH_LAYER) == 0)
+    {
         fprintfMigratedFieldData(sD, umig, z);
-	}
+    }
 #endif
 
 #if (TRANS_INTENSITY_TO_FILE == 1)
