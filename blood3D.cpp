@@ -18,7 +18,7 @@
 #define twopi                  6.283185307177959
 #define pi                     3.14159265358
 #define max32bit               4294967295
-#define initFieldValue         1.0
+#define initFieldValue         1000.0
 
 /* Development environment */
 #define GNU_LINUX              1
@@ -42,11 +42,11 @@
 /**** Flags for debug output in textfiles ****/
 
 /* Print multipe layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE       128
+#define MULTIPLE_LAYER_NUMBER_TO_FILE       0
 /* Print all BloodData to file */
 #define BLOOD_DATA_TO_FILE                  0
-/* Print transmitted power */
-#define TRANS_POWER_TO_FILE                 1
+/* Print transmitted intensity */
+#define TRANS_INTENSITY_TO_FILE             1
 /* Print vars in propagate() */
 #define PRINT_MIGRATE_DATA                  0           
 /* Print field absolute to file */
@@ -95,8 +95,8 @@ typedef struct
 
 /* output of structures ************************************/
 
-/* Function prints the transmitted power */
-static void fprintftransPowerFluxData(double transPower)
+/* Function prints the transmitted intensity */
+static void fprintftransIntensityData(double transPower)
 {
     char buf[40];
     snprintf(buf, sizeof(buf), "data/fieldData/transpowerflux.txt");
@@ -107,7 +107,7 @@ static void fprintftransPowerFluxData(double transPower)
     fopen_s(&fpTransPower, buf, "a");
 #endif
 
-    fprintf(fpTransPower, "angular frequency = %.4f\n", transPower);
+    fprintf(fpTransPower, "Transmitted intensity = %.8f\n", transPower);
     fclose(fpTransPower);
 }
 
@@ -832,7 +832,7 @@ static void interaction( sampData *sD, modelData *mD,
         /********** END - Handle the 0 frequency *********/
 
 		/********** Handle the mid +/- frequency *********/
-        y = y = ymax/2;
+        y = ymax/2;
         xiY = y/(ymax*dy)*twopi;       /* transverse wavenumber */
         /* x=0..1022 */
         for (x = 0; x < xmax; x += 2)
@@ -867,7 +867,7 @@ static void interaction( sampData *sD, modelData *mD,
                 bga2r = bk2r + xiX*xiX + xiY*xiY;
                 compsqrt(bga2r, bga2i, &bgar, &bgai);
                 compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
-                compmult(refr, refi, uin[y][2*x], uin[y][2*x+1], &urefl[y][2*x], &urefl[y][2*x+1]); /* reflected field, ur = R*uin */
+                //compmult(refr, refi, uin[y][2*x], uin[y][2*x+1], &urefl[y][2*x], &urefl[y][2*x+1]);
 
 				/* Handle y array-index 1-511 */
 				/* xmax=1024 -> u[y][0], u[y][1] ... u[y][1022], u[y][1023] */
@@ -915,8 +915,8 @@ static void interaction( sampData *sD, modelData *mD,
 /* main program to propagate the field through the a sequence of layers */
 static void propagate(sampData *sD, modelData *mD) 
 {
-    int x, y, z;
-    double powerfluxTransmitted, powerfluxReflected;
+    int x, y, z, xmax, ymax;
+    double intensityTransmitted, intensityReflected, T;
 
     /* Indexing [z][y][x] will be used where z is in propagation direction  */
     /* Fields in plane [y][x] will have Re[field] = field[y][x]             */
@@ -943,13 +943,16 @@ static void propagate(sampData *sD, modelData *mD)
     fprintfBloodData(bD, 8, 8, 8);
 #endif
 
+    xmax = sD->xAnt;
+    ymax = sD->yAnt;
+
     /* Assign field init values.            */
     /* Input field:     Re = 1.0 Im = 0.0   */
     /* Reflected field: Re = 0.0 Im = 0.0   */
-    for (y=0; y<sD->yAnt; y++)
+    for (y=0; y< ymax; y++)
     {
         /* E.g. sD->xAnt = 1024 s.p. x < 2047 -> 0, 2, ..., 2046 */
-        for (x=0; x<(2*sD->xAnt-1); x+=2)
+        for (x=0; x<(2*xmax-1); x+=2)
         {
             umig[y][x]   = initFieldValue;
             umig[y][x+1] = 0.0;
@@ -958,12 +961,31 @@ static void propagate(sampData *sD, modelData *mD)
         }
     }
 
+    /* Calculate transmission coefficient T = 4*nrbc*nba/(nrbc+nba)^2 */
+    T = (4*mD->epsilonRe*mD->backRe)/((mD->epsilonRe+mD->backRe)*(mD->epsilonRe + mD->backRe));
+
+    intensityTransmitted = 0.0;
     /* Start propagate from z=0 to z=(SIMULATION_DEPTH-1), max{z}=(sD->zAnt-2) */
     for (z=0; z< SIMULATION_DEPTH; z++)
     {
         /* Fill two layers in xy-plane with sample points */ 
         create2DGeometry(sD, bD[z/sD->zbox], sampleLayer1, z);
         create2DGeometry(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
+
+        /* Calculate initial intensity I = 1/2*E^2*eps */
+        if (z == 0)
+        {
+            for (y=0; y<ymax; y++)
+            {
+                /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
+                for (x=0; x<xmax; x++)
+                {
+                    intensityTransmitted += 0.5 * (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
+                                                  (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) /
+                                                  (mD->backRe * initFieldValue * initFieldValue);
+                }
+            }
+        }
 
         /* Migrate between the two layers */
         migrate(sD, mD, sampleLayer1, umig);
@@ -973,27 +995,29 @@ static void propagate(sampData *sD, modelData *mD)
         interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
 #endif
 
-        /* Calculate powerflux in z by summing over x-y plane */
-        powerfluxTransmitted = 0.0;
-        powerfluxReflected   = 0.0;
-        for ( y=0; y<sD->yAnt; y++)
+        /* Calculate loss in intensity due to absorption and the     */
+        /* reflection. If the following condition is fullfilled      */
+        /* (samplelayer1[y][x]-samplelayer2[y][x]) != 0 then there   */
+        /* will be reflection between surfaces. This is valid for    */
+        /* both external and internal reflection.                    */
+        intensityReflected = 0.0;
+        for ( y=0; y<ymax; y++)
         {
             /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
-            for (x=0; x<sD->xAnt; x++)
+            for (x=0; x<xmax; x++)
             {
-                powerfluxTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
-                                        (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) /
-                                        (mD->backRe* initFieldValue* initFieldValue);
-
-                powerfluxReflected   += (uref[y][2*x] * uref[y][2*x] + uref[y][2*x + 1] * uref[y][2*x + 1]) *
-                                        (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) /
-                                        (mD->backRe * initFieldValue * initFieldValue);
+                /* Intensity loss in both external and internal reflection */
+                if ((sampleLayer1[y][x] - sampleLayer2[y][x]) != 0)
+                {
+                    intensityReflected += 0.5 * (1-T) * (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
+                                                (mD->backRe + sampleLayer2[y][x] * (mD->epsilonRe - mD->backRe)) /
+                                                (mD->backRe * initFieldValue * initFieldValue);
+                }
             }
         }
 
-        /* normalize */
-        powerfluxTransmitted = powerfluxTransmitted /(sD->xAnt*sD->yAnt);
-        powerfluxReflected   = powerfluxReflected / (sD->xAnt * sD->yAnt);
+        /* Remove reflected intensity */
+        intensityTransmitted = intensityTransmitted - intensityReflected;
 
 #if (PRINT_MIGRATED_FIELD_TO_FILE == 1)
 	if( (z % PRINT_FIELD_EVERY_NTH_LAYER) == 0)
@@ -1002,12 +1026,10 @@ static void propagate(sampData *sD, modelData *mD)
 	}
 #endif
 
-#if (TRANS_POWER_TO_FILE == 1)
-        fprintftransPowerFluxData(powerfluxTransmitted);
+#if (TRANS_INTENSITY_TO_FILE == 1)
+    fprintftransIntensityData(intensityTransmitted/(1.0*xmax*ymax));
 #endif
-
-        printf("z=%d\t Powerflux transmitted=%.8f\t Powerflux reflected=%.8f\n",
-                z, powerfluxTransmitted, powerfluxReflected);
+        printf("z=%d\t Intensity transmitted=%.8f\n", z, intensityTransmitted/(1.0*xmax*ymax));
     }
 }
 
