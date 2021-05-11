@@ -919,7 +919,7 @@ static void interaction( sampData *sD, modelData *mD,
 static void propagate(sampData *sD, modelData *mD) 
 {
     int x, y, z, xmax, ymax;
-    double intensityTransmitted, intensityReflected, T;
+    double intensityTransmitted, intensityReflected, T, sqrtEps;
 
     /* Indexing [z][y][x] will be used where z is in propagation direction  */
     /* Fields in plane [y][x] will have Re[field] = field[y][x]             */
@@ -983,9 +983,8 @@ static void propagate(sampData *sD, modelData *mD)
                 /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
                 for (x=0; x<xmax; x++)
                 {
-                    intensityTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
-                                             sqrt((mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) /
-                                                  (mD->backRe * initFieldValue * initFieldValue));
+                    sqrtEps = sqrt((mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe))/mD->backRe);
+                    intensityTransmitted += (umig[y][2*x]*umig[y][2*x] + umig[y][2*x+1]*umig[y][2*x+1])*sqrtEps/(initFieldValue * initFieldValue);
                 }
             }
         }
@@ -1012,9 +1011,8 @@ static void propagate(sampData *sD, modelData *mD)
                 /* Intensity loss in both external and internal reflection */
                 if ((sampleLayer1[y][x] - sampleLayer2[y][x]) != 0)
                 {
-                    intensityReflected += (1-T) * (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
-                                                   sqrt((mD->backRe + sampleLayer2[y][x] * (mD->epsilonRe - mD->backRe)) /
-                                                        (mD->backRe * initFieldValue * initFieldValue));
+                    sqrtEps = sqrt((mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe);
+                    intensityReflected += sqrtEps*(1.0-T)*(umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1])/(initFieldValue * initFieldValue);
                 }
             }
         }
