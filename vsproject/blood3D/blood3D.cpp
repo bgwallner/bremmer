@@ -28,10 +28,10 @@
 #define MODEL_DEPTH_SIZE       1024
 
 /* Choose one angle setup for different simulations */
-#define ANGLES_RANDOM          1
+#define ANGLES_RANDOM          0
 #define ANGLE_THETA_ZERO       0
 #define ANGLE_THETA_PI_HALF    0
-#define ANGLE_THETA_PI_FOURTH  0
+#define ANGLE_THETA_PI_FOURTH  1
 
 /* Enable backward field */
 #define ENABLE_BREMMER_REFLECTION 1
@@ -42,7 +42,9 @@
 /**** Flags for debug output in textfiles ****/
 
 /* Print multipe layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE       0
+#define MULTIPLE_LAYER_NUMBER_TO_FILE       128
+/* Where to start writing geometry */
+#define START_MULTIPLE_LAYER_NUMBER_TO_FILE 510
 /* Print all BloodData to file */
 #define BLOOD_DATA_TO_FILE                  0
 /* Print transmitted intensity */
@@ -52,7 +54,7 @@
 /* Print field absolute to file */
 #define PRINT_MIGRATED_FIELD_TO_FILE        0
 /* Print field every every N:th layer */
-#define PRINT_FIELD_EVERY_NTH_LAYER         4
+#define PRINT_FIELD_EVERY_NTH_LAYER         0
 
 /* File handles */
 static FILE *fpSampleLayer;
@@ -155,7 +157,7 @@ static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
         for (x = 0; x < sD->xAnt; x++)
         {
             absoluteField = field[y][2*x]*field[y][2*x] + field[y][2*x+1]*field[y][2*x+1];
-            fprintf(fpMigratedField, "%.4f\t", sqrt(absoluteField)/ initFieldValue);
+            fprintf(fpMigratedField, "%.8f\t", sqrt(absoluteField)/ initFieldValue);
         }
         fprintf(fpMigratedField, "\n");
     }
@@ -566,8 +568,9 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
     }
 
 #if ( MULTIPLE_LAYER_NUMBER_TO_FILE > 0)
-    /* Print layers 0->MULTIPLE_LAYER_NUMBER_TO_FILE to files */
-    if (z < MULTIPLE_LAYER_NUMBER_TO_FILE)
+    /* Print layers with start START_MULTIPLE_LAYER_NUMBER_TO_FILE to files */
+    if ((z > START_MULTIPLE_LAYER_NUMBER_TO_FILE) && 
+        (z < (MULTIPLE_LAYER_NUMBER_TO_FILE + START_MULTIPLE_LAYER_NUMBER_TO_FILE)))
     {
         fprintfsampData(sD, geometry2D, z);
     }
@@ -972,7 +975,7 @@ static void propagate(sampData *sD, modelData *mD)
         create2DGeometry(sD, bD[z/sD->zbox], sampleLayer1, z);
         create2DGeometry(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
 
-        /* Calculate initial intensity I = 1/2*E^2*eps */
+        /* Calculate initial intensity I = v*eps*E^2 = sqrt(eps)*E^2 */
         if (z == 0)
         {
             for (y=0; y<ymax; y++)
@@ -980,9 +983,9 @@ static void propagate(sampData *sD, modelData *mD)
                 /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
                 for (x=0; x<xmax; x++)
                 {
-                    intensityTransmitted += 0.5 * (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
-                                                  (mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) /
-                                                  (mD->backRe * initFieldValue * initFieldValue);
+                    intensityTransmitted += (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
+                                             sqrt((mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) /
+                                                  (mD->backRe * initFieldValue * initFieldValue));
                 }
             }
         }
@@ -1009,9 +1012,9 @@ static void propagate(sampData *sD, modelData *mD)
                 /* Intensity loss in both external and internal reflection */
                 if ((sampleLayer1[y][x] - sampleLayer2[y][x]) != 0)
                 {
-                    intensityReflected += 0.5 * (1-T) * (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
-                                                (mD->backRe + sampleLayer2[y][x] * (mD->epsilonRe - mD->backRe)) /
-                                                (mD->backRe * initFieldValue * initFieldValue);
+                    intensityReflected += (1-T) * (umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1]) *
+                                                   sqrt((mD->backRe + sampleLayer2[y][x] * (mD->epsilonRe - mD->backRe)) /
+                                                        (mD->backRe * initFieldValue * initFieldValue));
                 }
             }
         }
@@ -1050,7 +1053,10 @@ int main(void)
         
     
     /* Size of box containing one bloodcell. Let this be 1/8 */
-    /* of total number of samplepoints.                      */
+    /* of total number of samplepoints. xbox, ybox and zbox  */
+    /* must be the same otherwise causing faulty geometry.   */
+    /* Notice that this does not mean that xant=yant must be */
+    /* equal to zant.                                        */
     sD.xbox = sD.xAnt / 8;
     sD.ybox = sD.yAnt / 8;
     sD.zbox = sD.zAnt / 8;
