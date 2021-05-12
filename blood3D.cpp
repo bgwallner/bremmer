@@ -23,15 +23,15 @@
 /* Development environment */
 #define GNU_LINUX              1
 
-/* Transversal size 2^N */
-#define MODEL_TRANSVERSAL_SIZE 1024
-#define MODEL_DEPTH_SIZE       1024
+/* Model size 2N*1024, N=1,2... */
+#define MODEL_DIMENSION        1024
+#define NBR_RBC_IN_ONE_ROW     8
 
 /* Choose one angle setup for different simulations */
-#define ANGLES_RANDOM          0
+#define ANGLES_RANDOM          1
 #define ANGLE_THETA_ZERO       0
 #define ANGLE_THETA_PI_HALF    0
-#define ANGLE_THETA_PI_FOURTH  1
+#define ANGLE_THETA_PI_FOURTH  0
 
 /* Enable backward field */
 #define ENABLE_BREMMER_REFLECTION 1
@@ -44,17 +44,17 @@
 /* Print multipe layer of RBC to file */
 #define MULTIPLE_LAYER_NUMBER_TO_FILE       128
 /* Where to start writing geometry */
-#define START_MULTIPLE_LAYER_NUMBER_TO_FILE 510
-/* Print all BloodData to file */
-#define BLOOD_DATA_TO_FILE                  0
-/* Print transmitted intensity */
+#define START_MULTIPLE_LAYER_NUMBER_TO_FILE 0
+/* Print all centers, angles etc for each RBC */
+#define BLOOD_DATA_TO_FILE                  1
+/* Print transmitted intensity I=I(z) */
 #define TRANS_INTENSITY_TO_FILE             1
 /* Print vars in propagate() */
 #define PRINT_MIGRATE_DATA                  0           
-/* Print field absolute to file */
-#define PRINT_MIGRATED_FIELD_TO_FILE        0
-/* Print field every every N:th layer */
-#define PRINT_FIELD_EVERY_NTH_LAYER         0
+/* Print field absolute E^2 to file */
+#define PRINT_MIGRATED_FIELD_TO_FILE        1
+/* Print field E^2 every N:th layer */
+#define PRINT_FIELD_EVERY_NTH_LAYER         1
 
 /* File handles */
 static FILE *fpSampleLayer;
@@ -1042,25 +1042,23 @@ int main(void)
     double lambda, volfrac, eps_average;
 
     /* Sample points for all model */	
-    sD.xAnt = MODEL_TRANSVERSAL_SIZE; /* first transverse direction  */
-    sD.yAnt = MODEL_TRANSVERSAL_SIZE; /* second transverse direction */
-    sD.zAnt = MODEL_DEPTH_SIZE;       /* depth                       */
-    sD.dx = 1;                        /* depth step                  */
+    sD.xAnt = MODEL_DIMENSION; /* first transverse direction  */
+    sD.yAnt = MODEL_DIMENSION; /* second transverse direction */
+    sD.zAnt = MODEL_DIMENSION; /* depth                       */
+    sD.dx = 1;                 /* depth step                  */
     sD.dy = 1;
     sD.dz = 1;
         
     
-    /* Size of box containing one bloodcell. Let this be 1/8 */
-    /* of total number of samplepoints. xbox, ybox and zbox  */
-    /* must be the same otherwise causing faulty geometry.   */
-    /* Notice that this does not mean that xant=yant must be */
-    /* equal to zant.                                        */
-    sD.xbox = sD.xAnt / 8;
-    sD.ybox = sD.yAnt / 8;
-    sD.zbox = sD.zAnt / 8;
+    /* Size of box containing one bloodcell. Let this be 1/NBR_RBC_IN_ONE_ROW  */
+    /* of total number of samplepoints. That mean 8x8 RBCs in transverse and   */
+    /* longitudinal direction .                                                */
+    sD.xbox = sD.xAnt / NBR_RBC_IN_ONE_ROW;
+    sD.ybox = sD.yAnt / NBR_RBC_IN_ONE_ROW;
+    sD.zbox = sD.zAnt / NBR_RBC_IN_ONE_ROW;
 
     /* Number of iterations for "smoothing" */
-    sD.iAnt = 3;
+    sD.iAnt = 2;
 
     /* Init variables for counting occurences */
     /* in RBC vs background                   */
