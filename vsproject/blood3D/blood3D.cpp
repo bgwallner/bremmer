@@ -27,7 +27,7 @@
 #define MODEL_DIMENSION        1024
 #define NBR_RBC_IN_ONE_ROW     8
 
-/* Choose one angle setup for different simulations */
+/* Choose one only angle setup for different simulations */
 #define ANGLES_RANDOM          1
 #define ANGLE_THETA_ZERO       0
 #define ANGLE_THETA_PI_HALF    0
@@ -36,7 +36,11 @@
 /* Enable backward field */
 #define ENABLE_BREMMER_REFLECTION 1
 
+/* For creating geometrical model only */    
+#define CREATE_GEOMETRY_ONLY      0
+
 /* Number of layers to simulate in propagation direction */
+/* and must be less than MODEL_DIMENSION.                */
 #define SIMULATION_DEPTH       1020
 
 /**** Flags for debug output in textfiles ****/
@@ -46,7 +50,7 @@
 /* Where to start writing geometry */
 #define START_MULTIPLE_LAYER_NUMBER_TO_FILE 0
 /* Print all centers, angles etc for each RBC */
-#define BLOOD_DATA_TO_FILE                  1
+#define BLOOD_DATA_TO_FILE                  0
 /* Print transmitted intensity I=I(z) */
 #define TRANS_INTENSITY_TO_FILE             1
 /* Print vars in propagate() */
@@ -157,7 +161,7 @@ static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
         for (x = 0; x < sD->xAnt; x++)
         {
             absoluteField = field[y][2*x]*field[y][2*x] + field[y][2*x+1]*field[y][2*x+1];
-            fprintf(fpMigratedField, "%.8f\t", sqrt(absoluteField)/ initFieldValue);
+            fprintf(fpMigratedField, "%.8f\t", sqrt(absoluteField)/initFieldValue);
         }
         fprintf(fpMigratedField, "\n");
     }
@@ -289,7 +293,6 @@ static double random1(double a)
 static void fourn_wrapper(MatDoub& u1, int xmax, int ymax, bool inverse)
 {
     int i, y, x;
-    bool stop;
 
     /* Create a Vector with double and all zeros */
     VecDoub v1(2 * xmax * ymax, 0.0);
@@ -310,12 +313,6 @@ static void fourn_wrapper(MatDoub& u1, int xmax, int ymax, bool inverse)
             v1[i] = u1[y][x];
             v1[i + 1] = u1[y][x + 1];
             i += 2;
-
-            /* DEBUG test */
-            if (v1[i] > initFieldValue || v1[i + 1] > initFieldValue)
-            {
-                stop = true;
-            }
         }
     }
 
@@ -341,12 +338,6 @@ static void fourn_wrapper(MatDoub& u1, int xmax, int ymax, bool inverse)
                 /* Inverse transform needs division with all dimensions */
                 u1[y][x] = v1[i] / (xmax * ymax);
                 u1[y][x + 1] = v1[i + 1] / (xmax * ymax);
-
-                /* DEBUG test */
-                if (u1[y][x] > initFieldValue || u1[y][x+1] > initFieldValue)
-                {
-                    stop = true;
-                }
             }
             else
             {
@@ -365,11 +356,14 @@ static bloodData ****mallocBloodData3DArray(int dim1, int dim2, int dim3)
 {
     int i, j, k;
     bloodData ****a = (bloodData ****) malloc(dim1 * sizeof(bloodData ***));
-    for (i=0; i<dim1; i++){
+    for (i=0; i<dim1; i++)
+    {
         a[i] = (bloodData ***) malloc(dim2 * sizeof(bloodData **));
-        for (j=0; j<dim2; j++){
+        for (j=0; j<dim2; j++)
+        {
             a[i][j] = (bloodData **) malloc(dim3 * sizeof(bloodData *));
-            for (k=0; k<dim3; k++) {
+            for (k=0; k<dim3; k++)
+            {
                     a[i][j][k] = (bloodData *) malloc(sizeof(bloodData));
             }
         }
@@ -944,7 +938,7 @@ static void propagate(sampData *sD, modelData *mD)
 
 #if ( BLOOD_DATA_TO_FILE == 1 )
     fprintfBloodData(bD, 8, 8, 8);
-#endif
+#endif /* BLOOD_DATA_TO_FILE */
 
     xmax = sD->xAnt;
     ymax = sD->yAnt;
@@ -969,12 +963,13 @@ static void propagate(sampData *sD, modelData *mD)
 
     intensityTransmitted = 0.0;
     /* Start propagate from z=0 to z=(SIMULATION_DEPTH-1), max{z}=(sD->zAnt-2) */
-    for (z=0; z< SIMULATION_DEPTH; z++)
+    for (z=0; z<SIMULATION_DEPTH; z++)
     {
         /* Fill two layers in xy-plane with sample points */ 
         create2DGeometry(sD, bD[z/sD->zbox], sampleLayer1, z);
-        create2DGeometry(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
 
+#if ( CREATE_GEOMETRY_ONLY == 0)
+        create2DGeometry(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
         /* Calculate initial intensity I = v*eps*E^2 = sqrt(eps)*E^2 */
         if (z == 0)
         {
@@ -995,7 +990,7 @@ static void propagate(sampData *sD, modelData *mD)
 #if ( ENABLE_BREMMER_REFLECTION == 1)
         /* Calculate interaction between two layers */
         interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
-#endif
+#endif /* ENABLE_BREMMER_REFLECTION */
 
         /* Calculate loss in intensity due to absorption and the     */
         /* reflection. If the following condition is fullfilled      */
@@ -1025,12 +1020,13 @@ static void propagate(sampData *sD, modelData *mD)
     {
         fprintfMigratedFieldData(sD, umig, z);
     }
-#endif
+#endif /* PRINT_MIGRATED_FIELD_TO_FILE */
 
 #if (TRANS_INTENSITY_TO_FILE == 1)
     fprintftransIntensityData(intensityTransmitted/(1.0*xmax*ymax));
-#endif
+#endif /* TRANS_INTENSITY_TO_FILE */
         printf("z=%d\t Intensity transmitted=%.8f\n", z, intensityTransmitted/(1.0*xmax*ymax));
+#endif /* CREATE_GEOMETRY_ONLY */
     }
 }
 
@@ -1058,7 +1054,7 @@ int main(void)
     sD.zbox = sD.zAnt / NBR_RBC_IN_ONE_ROW;
 
     /* Number of iterations for "smoothing" */
-    sD.iAnt = 2;
+    sD.iAnt = 3;
 
     /* Init variables for counting occurences */
     /* in RBC vs background                   */
@@ -1091,12 +1087,12 @@ int main(void)
     volfrac = 1.0*nbrOfSamplespointsInRbc/(nbrOfSamplespointsInRbc + nbrOfSamplespointsInBackground);
     eps_average = (mD.epsilonRe * nbrOfSamplespointsInRbc + mD.backRe * nbrOfSamplespointsInBackground) /
         (nbrOfSamplespointsInRbc + nbrOfSamplespointsInBackground);
-        
-        
 
     /* Calculate volume fraction RBC vs background and weighted average of permitivity seen */
     printf("Volumefraction RBC vs background:%.4f percent\n", volfrac*100);
     printf("Average permitivity realpart:%.4f\n", eps_average);
+    printf("Wavelength in samplingpoints:%.8f\n", lambda);
+    printf("Angular frequency:%.8f\n", mD.afreq);
 
     printf("Program Exit. \n");
 
