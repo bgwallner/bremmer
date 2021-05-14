@@ -23,20 +23,30 @@
 /* Development environment */
 #define GNU_LINUX              1
 
-/* Model size 2N*1024, N=1,2... */
-#define MODEL_DIMENSION        1024
-#define NBR_RBC_IN_ONE_ROW     8
+/* These defines can be changed to modify the number of sampling-points  */
+/* of the whole model and the number of RBCs. Care must be taken so that */
+/* the wavelength becomes ~10 or more. E.g. MODEL_DIMENSION = 1024 and   */
+/* NBR_RBC_IN_ONE_ROW = 8 will give wavelength ~10 samplingpoints.       */
 
-/* Choose one only angle setup for different simulations */
-#define ANGLES_RANDOM          1
-#define ANGLE_THETA_ZERO       0
+/* Model size chosen as 2N*1024, N=1,2...     */
+#define MODEL_DIMENSION        1024
+/* Number of RBCs in one row, 2^N, N=0,1,2... */
+#define NBR_RBC_IN_ONE_ROW     2
+
+/* Number of iterations in migrate() for minimizing change of */
+/* wavenumber due to difference in realpart of permitivity.   */
+#define NBR_SMOOTING_ITERATIONS 3
+
+/* Choose *one* only angle setup for different simulations */
+#define ANGLES_RANDOM          0
+#define ANGLE_THETA_ZERO       1
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
 
 /* Enable backward field */
 #define ENABLE_BREMMER_REFLECTION 1
 
-/* For creating geometrical model only */    
+/* For creating geometrical model only. Mostly for test. */    
 #define CREATE_GEOMETRY_ONLY      0
 
 /* Number of layers to simulate in propagation direction */
@@ -46,14 +56,14 @@
 /**** Flags for debug output in textfiles ****/
 
 /* Print multipe layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE       128
-/* Where to start writing geometry */
+#define MULTIPLE_LAYER_NUMBER_TO_FILE       1020
+/* From which z-value to start print geometry */
 #define START_MULTIPLE_LAYER_NUMBER_TO_FILE 0
 /* Print all centers, angles etc for each RBC */
 #define BLOOD_DATA_TO_FILE                  0
 /* Print transmitted intensity I=I(z) */
 #define TRANS_INTENSITY_TO_FILE             1
-/* Print vars in propagate() */
+/* Print vars in propagate(). For debug. */
 #define PRINT_MIGRATE_DATA                  0           
 /* Print field absolute E^2 to file */
 #define PRINT_MIGRATED_FIELD_TO_FILE        1
@@ -161,7 +171,10 @@ static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
         for (x = 0; x < sD->xAnt; x++)
         {
             absoluteField = field[y][2*x]*field[y][2*x] + field[y][2*x+1]*field[y][2*x+1];
-            fprintf(fpMigratedField, "%.8f\t", sqrt(absoluteField)/initFieldValue);
+            //fprintf(fpMigratedField, "%.8f\t", sqrt(absoluteField)/initFieldValue);
+
+            /* Print real-part of the field */
+            fprintf(fpMigratedField, "%.8f\t", field[y][2*x]/initFieldValue);
         }
         fprintf(fpMigratedField, "\n");
     }
@@ -444,7 +457,7 @@ static void initBloodData3DArray(sampData *sD, bloodData ****bD)
 static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, int z)
 {
     /* Coordinates in global coordinate system */
-    int x, y, zb, xb, dx, dy, yb;
+    int x, y, zb, xb, dx, dy, yb, cellsize, xmax, ymax;
     /* Coordinates in local cell with disk in origo, e.g. xl = f(x,y,z) */
     int xl, yl, zl;
     /* Coordinates in Euler rotated system, e.g. xe = f(xl,yl,zl)       */
@@ -454,15 +467,19 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
     /* Trigonometric values */
     double cost, sint, sinf, cosf, sinp, cosp;
 
+    xmax = sD->xAnt;
+    ymax = sD->yAnt;
+    cellsize = sD->xbox;
+
     /* Iterate over the whole xy-plane */
-    for (y=0; y<sD->yAnt; y++) 
+    for (y=0; y<ymax; y++)
     {
-        for (x=0; x<sD->xAnt; x++) 
+        for (x=0; x<xmax; x++)
         {
             /* Calculate which cell */
-            zb=z/sD->zbox;
-            xb=x/sD->xbox;
-            yb=y/sD->ybox;
+            zb=z/cellsize;
+            xb=x/cellsize;
+            yb=y/cellsize;
 
             /* Pre-assign Euler angels to simplify expressions */
             cost = cos(bD[yb][xb]->theta);
@@ -521,10 +538,10 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             /* take slightly more space than the size of the "box". In practice this is a   */
             /* neglectible problem.                                                         */
 
-            R0 = 64.4948;
-            C0 = 13.3608;
-            C2 = 129.1546;
-            C4 = -72.41243;
+            R0 = 3.91*cellsize/7.76;
+            C0 = 0.81*cellsize/7.76;
+            C2 = 7.83*cellsize/7.76;
+            C4 = -4.39*cellsize/7.76;
             /* Calculate (xe,ye) corresponding radius */
             Re = sqrt(pow(xe,2) + pow(ye,2));
 
@@ -542,20 +559,20 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
                 if ( D_xDiff > 0.0)
                 {
                     /* ze is outside the disk */
-                    geometry2D[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
+                    geometry2D[(x+dx)%xmax][(y+dy)%ymax] = 0;
                     nbrOfSamplespointsInBackground++;
                 }
                 else
                 {
                 /* ze is within the biconcave disk */
-                    geometry2D[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 1;
+                    geometry2D[(x+dx)%xmax][(y+dy)%ymax] = 1;
                     nbrOfSamplespointsInRbc++;
                 }
             }
             else
             {
                /* Re is outside the disk */
-                geometry2D[(x+dx)%sD->xAnt][(y+dy)%sD->yAnt] = 0;
+                geometry2D[(x+dx)%xmax][(y+dy)%ymax] = 0;
                 nbrOfSamplespointsInBackground++;
             }
         }
@@ -614,7 +631,7 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
     {   /*interpolation slowness */
         s = smin + i*(smax-smin)/(imax-1);                                    /* slowness */
         epsr = (mD->backRe + s * (mD->epsilonRe - mD->backRe)) / mD->backRe;  /* Re permittivity, min = mD->back, max = mD->epsilonRe */
-        epsi = -s* mD->epsilonIm;                                              /* Im permittivity*/
+        epsi = -s* mD->epsilonIm;                                             /* Im permittivity*/
         compmult(eta, w, eta, w, &kr, &ki);                                   /* wave number, c^{-1} s */
         compmult(kr, ki, epsr, epsi, &k2r, &ga2i);                            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
 
@@ -937,7 +954,7 @@ static void propagate(sampData *sD, modelData *mD)
     initBloodData3DArray( sD, bD );
 
 #if ( BLOOD_DATA_TO_FILE == 1 )
-    fprintfBloodData(bD, 8, 8, 8);
+    fprintfBloodData(bD, NBR_RBC_IN_ONE_ROW, NBR_RBC_IN_ONE_ROW, NBR_RBC_IN_ONE_ROW);
 #endif /* BLOOD_DATA_TO_FILE */
 
     xmax = sD->xAnt;
@@ -967,9 +984,8 @@ static void propagate(sampData *sD, modelData *mD)
     {
         /* Fill two layers in xy-plane with sample points */ 
         create2DGeometry(sD, bD[z/sD->zbox], sampleLayer1, z);
-
-#if ( CREATE_GEOMETRY_ONLY == 0)
         create2DGeometry(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
+
         /* Calculate initial intensity I = v*eps*E^2 = sqrt(eps)*E^2 */
         if (z == 0)
         {
@@ -983,7 +999,7 @@ static void propagate(sampData *sD, modelData *mD)
                 }
             }
         }
-
+#if ( CREATE_GEOMETRY_ONLY == 0)
         /* Migrate between the two layers */
         migrate(sD, mD, sampleLayer1, umig);
         
@@ -991,6 +1007,7 @@ static void propagate(sampData *sD, modelData *mD)
         /* Calculate interaction between two layers */
         interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
 #endif /* ENABLE_BREMMER_REFLECTION */
+#endif /* CREATE_GEOMETRY_ONLY */
 
         /* Calculate loss in intensity due to absorption and the     */
         /* reflection. If the following condition is fullfilled      */
@@ -1026,7 +1043,6 @@ static void propagate(sampData *sD, modelData *mD)
     fprintftransIntensityData(intensityTransmitted/(1.0*xmax*ymax));
 #endif /* TRANS_INTENSITY_TO_FILE */
         printf("z=%d\t Intensity transmitted=%.8f\n", z, intensityTransmitted/(1.0*xmax*ymax));
-#endif /* CREATE_GEOMETRY_ONLY */
     }
 }
 
@@ -1037,7 +1053,7 @@ int main(void)
     modelData mD;
     double lambda, volfrac, eps_average;
 
-    /* Sample points for all model */	
+    /* Sample points for all model. Always equal size.        */	
     sD.xAnt = MODEL_DIMENSION; /* first transverse direction  */
     sD.yAnt = MODEL_DIMENSION; /* second transverse direction */
     sD.zAnt = MODEL_DIMENSION; /* depth                       */
@@ -1047,14 +1063,13 @@ int main(void)
         
     
     /* Size of box containing one bloodcell. Let this be 1/NBR_RBC_IN_ONE_ROW  */
-    /* of total number of samplepoints. That mean 8x8 RBCs in transverse and   */
-    /* longitudinal direction .                                                */
+    /* of total number of samplepoints. Always equal size.                     */
     sD.xbox = sD.xAnt / NBR_RBC_IN_ONE_ROW;
     sD.ybox = sD.yAnt / NBR_RBC_IN_ONE_ROW;
     sD.zbox = sD.zAnt / NBR_RBC_IN_ONE_ROW;
 
     /* Number of iterations for "smoothing" */
-    sD.iAnt = 3;
+    sD.iAnt = NBR_SMOOTING_ITERATIONS;
 
     /* Init variables for counting occurences */
     /* in RBC vs background                   */
