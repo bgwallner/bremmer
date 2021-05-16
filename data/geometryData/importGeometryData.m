@@ -17,21 +17,15 @@ figure;
 % Matrix for 3D geometry
 sample3D = zeros(1024,1024);
 
-% Video writer object 
-video = VideoWriter('peaks.avi');
-open(video);
-
 %############# USER DEFINED ###############
 
 % The number must match the number of input.
 % i.e. if NBR=128 then files samplelayer0.txt,
 % samplelayer1.txt, ... , samplelayer127.txt
 % must exist.
-NBR = 128;
-
 %##########################################
-
-M(NBR) = struct('cdata',[],'colormap',[]);
+NBR = 1019;
+MF(NBR) = struct('cdata',[],'colormap',[]);
 for j = 1:NBR
     fprintf('Geometry layer:%d\n', j);
     %% Initialize variables
@@ -39,10 +33,56 @@ for j = 1:NBR
 %############# USER DEFINED ###############
 
     % Absolute path to samplelayer files
-    fileBase = 'C:\github\bremmer\data\geometryData\samplelayer';
+    fileBase = 'C:\github\bremmer_master\data\geometryData\samplelayer';
     
 %##########################################
-    fileNumber = string(j-1);
+    fileNumber = string(j);
+    fileType = '.txt';
+    filename = strcat(fileBase, fileNumber, fileType);
+    delimiter = '\t';
+
+    formatSpec = '%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%f%[^\n\r]';
+
+    %% Open the text file.
+    fileID = fopen(filename,'r');
+
+    %% Read columns of data according to the format.
+    % This call is based on the structure of the file used to generate this
+    % code. If an error occurs for a different file, try regenerating the code
+    % from the Import Tool.
+    dataArray = textscan(fileID, formatSpec, 'Delimiter', delimiter, 'EmptyValue' ,NaN, 'ReturnOnError', false);
+
+    %% Close the text file.
+    fclose(fileID);
+
+    %% Post processing for unimportable data.
+    % No unimportable data rules were applied during the import, so no post
+    % processing code is included. To generate code which works for
+    % unimportable data, select unimportable cells in a file and regenerate the
+    % script.
+
+    %% Create output variable
+    samplelayer = [dataArray{1:end-1}];
+    
+    % Take a section form the middle
+    verticalcut(j,:)=samplelayer(:,256);
+end
+
+
+%##########################################
+NBR = 128;
+MF(NBR) = struct('cdata',[],'colormap',[]);
+for j = 1:NBR
+    fprintf('Geometry layer:%d\n', j);
+    %% Initialize variables
+    
+%############# USER DEFINED ###############
+
+    % Absolute path to samplelayer files
+    fileBase = 'C:\github\bremmer_master\data\geometryData\samplelayer';
+    
+%##########################################
+    fileNumber = string(j);
     fileType = '.txt';
     filename = strcat(fileBase, fileNumber, fileType);
     delimiter = '\t';
@@ -75,32 +115,14 @@ for j = 1:NBR
 
     % Plot contour of matrix
     contour(samplelayer);
-    %contourf(samplelayer);
     drawnow
-    M(j) = getframe;
-    writeVideo(video,M(j));
-    
-    %% Clear temporary variables
-    clearvars filename delimiter formatSpec fileID dataArray ans;
+    MF(j) = getframe;
 end
 
-close(video);
+movie(MF);
 
-% Display layer per layer as movie
-movie(M);
-
-% Combined contour plot
-subplot(2,2,1);
-contour(sample3D(:,:,16));
-subplot(2,2,2);
-contour(sample3D(:,:,32));
-subplot(2,2,3);
-contour(sample3D(:,:,48));
-subplot(2,2,4);
-contour(sample3D(:,:,64));
-
-% Prepare for 3D plot by extracting 0 from grid
-sample3D_reduced = sample3D(1:4:end,1:4:end,1:4:end);
+% % Prepare for 3D plot by extracting 0 from grid
+sample3D_reduced = sample3D(1:4:end,1:4:end,1:1:end);
 [X,Y,Z] = ndgrid(1:size(sample3D_reduced,1), 1:size(sample3D_reduced,2), 1:size(sample3D_reduced,3));
 keep = (sample3D_reduced(:) ~= 0);
 X=X(keep);

@@ -6,11 +6,6 @@
 #include <string.h>
 #include <random>
 #include <complex>
-
-//#include <time.h>
-#include <ctime>
-#include <assert.h>
-
 #include "nr3.h"
 #include "fourier_ndim.h"
 
@@ -23,23 +18,38 @@
 /* Development environment */
 #define GNU_LINUX              1
 
-/* These defines can be changed to modify the number of sampling-points  */
-/* of the whole model and the number of RBCs. Care must be taken so that */
-/* the wavelength becomes ~10 or more. E.g. MODEL_DIMENSION = 1024 and   */
-/* NBR_RBC_IN_ONE_ROW = 8 will give wavelength ~10 samplingpoints.       */
+/******************* Optical properties *********************/
+/* Value chosen according to "Simulations of light scattering from a biconcave     */ 
+/* red blood cell using the finite-differencetime-domain method" by Jun Q. Lu for  */
+/* lambda = 700nm -> ni = 4.3*10^-6 -> ei = 2*nr*ni = 1.20916*10^-5                */
+#define LIGHT_WAVE_LENGTH      0.6328  /* um */
+#define RBC_WIDTH              7.76    /* um */
+#define RBC_PERMITIVITY_RE     1.977
+#define RBC_PERMITIVITY_IM     0.0000120916
+#define BA_PERMITIVITY_RE      1.809
+#define BA_PERMITIVITY_IM      0.0
 
-/* Model size chosen as 2N*1024, N=1,2...     */
+/* These defines can be changed to modify the number of sampling-points     */
+/* of the whole model and the number of RBCs. Care must be taken so that    */
+/* the wavelength is sampled 10 times or more. E.g. MODEL_DIMENSION =       */
+/* 1024 and NBR_RBC_IN_ONE_ROW = 8 will give wavelength ~10 samplingpoints. */
+/* If choosing MODEL_DIMENSION=1024 and having NBR_RBC_IN_ONE_ROW = 16      */
+/* would cause wavelength to be ~5 samplingpoints which is to small.        */
+
+/* Model size chosen as 2^N*1024, N=1,2...    */
 #define MODEL_DIMENSION        1024
 /* Number of RBCs in one row, 2^N, N=0,1,2... */
-#define NBR_RBC_IN_ONE_ROW     2
+#define NBR_RBC_IN_ONE_ROW     8
 
-/* Number of iterations in migrate() for minimizing change of */
-/* wavenumber due to difference in realpart of permitivity.   */
+/* Number of iterations in migrate() for minimizing change of    */
+/* wavenumber due to difference in realpart of permitivity.      */
+/* Each calculation step is calculated epsi+d, epsi+2d,...,epsf  */
+/* get a smooth transition from epsi->epsf in steps of some d.   */
 #define NBR_SMOOTING_ITERATIONS 3
 
 /* Choose *one* only angle setup for different simulations */
-#define ANGLES_RANDOM          0
-#define ANGLE_THETA_ZERO       1
+#define ANGLES_RANDOM          1
+#define ANGLE_THETA_ZERO       0
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
 
@@ -60,7 +70,7 @@
 /* From which z-value to start print geometry */
 #define START_MULTIPLE_LAYER_NUMBER_TO_FILE 0
 /* Print all centers, angles etc for each RBC */
-#define BLOOD_DATA_TO_FILE                  0
+#define BLOOD_DATA_TO_FILE                  1
 /* Print transmitted intensity I=I(z) */
 #define TRANS_INTENSITY_TO_FILE             1
 /* Print vars in propagate(). For debug. */
@@ -170,11 +180,9 @@ static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
     {
         for (x = 0; x < sD->xAnt; x++)
         {
-            absoluteField = field[y][2*x]*field[y][2*x] + field[y][2*x+1]*field[y][2*x+1];
-            //fprintf(fpMigratedField, "%.8f\t", sqrt(absoluteField)/initFieldValue);
-
             /* Print real-part of the field */
-            fprintf(fpMigratedField, "%.8f\t", field[y][2*x]/initFieldValue);
+            absoluteField = field[y][2*x]*field[y][2*x];
+            fprintf(fpMigratedField, "%.8f\t", sqrt(absoluteField)/initFieldValue);
         }
         fprintf(fpMigratedField, "\n");
     }
@@ -995,7 +1003,8 @@ static void propagate(sampData *sD, modelData *mD)
                 for (x=0; x<xmax; x++)
                 {
                     sqrtEps = sqrt((mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe))/mD->backRe);
-                    intensityTransmitted += (umig[y][2*x]*umig[y][2*x] + umig[y][2*x+1]*umig[y][2*x+1])*sqrtEps/(initFieldValue * initFieldValue);
+                    /* Real-part of field */
+                    intensityTransmitted += (umig[y][2*x]*umig[y][2*x])*sqrtEps/(initFieldValue * initFieldValue);
                 }
             }
         }
@@ -1024,7 +1033,8 @@ static void propagate(sampData *sD, modelData *mD)
                 if ((sampleLayer1[y][x] - sampleLayer2[y][x]) != 0)
                 {
                     sqrtEps = sqrt((mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe);
-                    intensityReflected += sqrtEps*(1.0-T)*(umig[y][2*x] * umig[y][2*x] + umig[y][2*x+1] * umig[y][2*x+1])/(initFieldValue * initFieldValue);
+                    /* Real-part of field */
+                    intensityReflected += sqrtEps*(1.0-T)*(umig[y][2*x] * umig[y][2*x])/(initFieldValue * initFieldValue);
                 }
             }
         }
@@ -1076,27 +1086,21 @@ int main(void)
     nbrOfSamplespointsInRbc = 0;
     nbrOfSamplespointsInBackground = 0;
         
-    /* Field data */
+    /******************* Field data ******************/
 
-    /* RBC max size 7.76 um is equivalent to rbcWidthInSampPoints*/
-    /* lambda = 632.8 nm = (sD.xbox/7.76)*0.6328 s.p             */
-
-    rbcWidthInSampPoints = sD.xbox;               /* RBC width                          */
-    lambda = (rbcWidthInSampPoints/7.76)*0.6328;  /* Sample points                      */
-    mD.afreq = 2*pi/lambda;                       /* angular frequency c^{-1} s^{-1}    */
-    mD.epsilonRe = 1.977;                         /* Re permittivity RBC                */
-
-    /* Value chosen according to "Simulations of light scattering from a biconcave     */ 
-    /* red blood cell using the finite-differencetime-domain method" by Jun Q. Lu for  */
-    /* lambda = 700nm -> ni = 4.3*10^-6 -> ei = 2*nr*ni = 1.20916*10^-5                */
-    mD.epsilonIm = 0.0000120916;                 /* Im permittivity */
-    mD.backRe = 1.809;
-    mD.backIm = 0.0;
+    /* RBC max size RBC_WIDTH is equivalent to rbcWidthInSampPoints*/
+    rbcWidthInSampPoints = sD.xbox;                               /* RBC width                          */
+    lambda = (rbcWidthInSampPoints/RBC_WIDTH)*LIGHT_WAVE_LENGTH;  /* Sample points                      */
+    mD.afreq = 2*pi/lambda;                                       /* angular frequency c^{-1} s^{-1}    */
+    mD.epsilonRe = RBC_PERMITIVITY_RE;                            /* Re permittivity RBC                */
+    mD.epsilonIm = RBC_PERMITIVITY_IM;                            /* Im permittivity                    */
+    mD.backRe = BA_PERMITIVITY_RE;
+    mD.backIm = BA_PERMITIVITY_IM;
 
     /* Start random number generator */
     std::srand(time(0));
 
-    /* Model contains 2D layer with ALL samplepoints */
+    /* Start propagation of wave */
     propagate( &sD, &mD );
 
     volfrac = 1.0*nbrOfSamplespointsInRbc/(nbrOfSamplespointsInRbc + nbrOfSamplespointsInBackground);
