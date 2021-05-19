@@ -1,8 +1,9 @@
-/* Bo-Göran Wallner */
+/* Bo-Göran Wallner 2021 */
 
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
+#include <time.h>
 #include <string.h>
 #include <random>
 #include <complex>
@@ -22,6 +23,7 @@
 /* Value chosen according to "Simulations of light scattering from a biconcave     */ 
 /* red blood cell using the finite-differencetime-domain method" by Jun Q. Lu for  */
 /* lambda = 700nm -> ni = 4.3*10^-6 -> ei = 2*nr*ni = 1.20916*10^-5                */
+/* lambda = 1000nm -> ni = 1.68*10^-5 -> ei = 6.64272*10^-5                        */
 #define LIGHT_WAVE_LENGTH      0.6328  /* um */
 #define RBC_WIDTH              7.76    /* um */
 #define RBC_PERMITIVITY_RE     1.977
@@ -36,7 +38,10 @@
 /* If choosing MODEL_DIMENSION=1024 and having NBR_RBC_IN_ONE_ROW = 16      */
 /* would cause wavelength to be ~5 samplingpoints which is to small.        */
 
-/* Model size chosen as 2^N*1024, N=1,2...    */
+/* Model size chosen as 2^N*1024, N=0,1,2...     */
+/* NOTICE! Log-files have a huge disk-demand and */
+/* if disk runs out of space program segfaults.  */
+/* Using 1024 roughly give 10GB of data.         */
 #define MODEL_DIMENSION        1024
 /* Number of RBCs in one row, 2^N, N=0,1,2... */
 #define NBR_RBC_IN_ONE_ROW     8
@@ -780,7 +785,6 @@ static void interaction( sampData *sD, modelData *mD,
 
     MatInt refp(ymax, xmax);
     /* Checks whether RBC->Background or Background->RBC */
-    /* Essentially refl=1 most of the time.              */
     for (y=0; y<ymax; y++)
     {
         for (x=0; x<xmax; x++)
@@ -1061,7 +1065,13 @@ int main(void)
 {
     sampData sD;
     modelData mD;
+    time_t startTime, stopTime;
     double lambda, volfrac, eps_average;
+
+    /* Benchmarking */
+    startTime = time(NULL);
+    stopTime  = time(NULL);
+    ctime(&startTime);
 
     /* Sample points for all model. Always equal size.        */	
     sD.xAnt = MODEL_DIMENSION; /* first transverse direction  */
@@ -1107,12 +1117,15 @@ int main(void)
     eps_average = (mD.epsilonRe * nbrOfSamplespointsInRbc + mD.backRe * nbrOfSamplespointsInBackground) /
         (nbrOfSamplespointsInRbc + nbrOfSamplespointsInBackground);
 
+    stopTime = time(NULL);
     /* Calculate volume fraction RBC vs background and weighted average of permitivity seen */
     printf("Volumefraction RBC vs background:%.4f percent\n", volfrac*100);
     printf("Average permitivity realpart:%.4f\n", eps_average);
     printf("Wavelength in samplingpoints:%.8f\n", lambda);
     printf("Angular frequency:%.8f\n", mD.afreq);
-
+    printf("######### BENCHMARKING #########\n");
+    printf("Simulation started: %s", ctime(&startTime));
+    printf("Simulation ended: %s", ctime(&stopTime));
     printf("Program Exit. \n");
 
 }
