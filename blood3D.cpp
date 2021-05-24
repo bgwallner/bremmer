@@ -38,18 +38,18 @@
 /* If choosing MODEL_DIMENSION=1024 and having NBR_RBC_IN_ONE_ROW = 16      */
 /* would cause wavelength to be ~5 samplingpoints which is to small.        */
 
-/* Model size chosen as 2^N*1024, N=0,1,2...     */
-/* NOTICE! Log-files have a huge disk-demand and */
-/* if disk runs out of space program segfaults.  */
-/* Using 1024 roughly give 10GB of data.         */
+/* Model size chosen as 2^N*1024, N=0,1,2...        */
+/* NOTICE! Log-files have a huge disk-demand and    */
+/* if disk runs out of space the program segfaults. */
+/* Using 1024 roughly give 10GB of data.            */
 #define MODEL_DIMENSION        1024
-/* Number of RBCs in one row, 2^N, N=0,1,2... */
+/* Number of RBCs in one row, 2^N, N=0,1,2...       */
 #define NBR_RBC_IN_ONE_ROW     8
 
 /* Number of iterations in migrate() for minimizing change of    */
 /* wavenumber due to difference in realpart of permitivity.      */
-/* Each calculation step is calculated epsi+d, epsi+2d,...,epsf  */
-/* get a smooth transition from epsi->epsf in steps of some d.   */
+/* Each calculation step is calculated eps0+d, eps0+2d,...,eps1  */
+/* get a smooth transition from eps0->eps1 in steps of some d.   */
 #define NBR_SMOOTING_ITERATIONS 3
 
 /* Choose *one* only angle setup for different simulations */
@@ -64,14 +64,25 @@
 /* For creating geometrical model only. Mostly for test. */    
 #define CREATE_GEOMETRY_ONLY      0
 
+/* To be able som simulate depths larger than MODEL_DIMENSION */
+/* can run consequtive simulation using field output from     */
+/* previous simulation as initial value for the field. For    */
+/* each new simulation a new random 3D geometrical model is   */
+/* created. Arbitrary number of simulations can be created.   */
+/* Care should be taken for disk-space if logging fields.     */ 
+#define SIMULATION_NBR_OF_MODELS 1
+
 /* Number of layers to simulate in propagation direction */
-/* and must be less than MODEL_DIMENSION.                */
-#define SIMULATION_DEPTH       1020
+#define SIMULATION_DEPTH       MODEL_DIMENSION-1
 
 /**** Flags for debug output in textfiles ****/
 
-/* Print multipe layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE       1020
+/* Print multipe geometrical layer of RBC to file. If vertical  */
+/* field shall be plotted against geometrical model the value   */
+/* shall be set equal to SIMULATION_DEPTH to be able to plot    */
+/* in e.g. MATLAB. E.g. MODEL_DIMENSION=1024 will give          */
+/* output samplelayer1.txt -> samplelayer1022.txt.              */
+#define MULTIPLE_LAYER_NUMBER_TO_FILE       SIMULATION_DEPTH
 /* From which z-value to start print geometry */
 #define START_MULTIPLE_LAYER_NUMBER_TO_FILE 0
 /* Print all centers, angles etc for each RBC */
@@ -80,9 +91,9 @@
 #define TRANS_INTENSITY_TO_FILE             1
 /* Print vars in propagate(). For debug. */
 #define PRINT_MIGRATE_DATA                  0           
-/* Print field absolute E^2 to file */
+/* Print field absolute |E| to file */
 #define PRINT_MIGRATED_FIELD_TO_FILE        1
-/* Print field E^2 every N:th layer */
+/* Print field |E| every N:th layer */
 #define PRINT_FIELD_EVERY_NTH_LAYER         1
 
 /* File handles */
@@ -913,6 +924,7 @@ static void interaction( sampData *sD, modelData *mD,
         fourn_wrapper( urefl, xmax, ymax, true ); /* inverse spatial FFT */
         fourn_wrapper( uin, xmax, ymax, true );
 
+#if ( ENABLE_BREMMER_REFLECTION == 1)
         for (y=0; y<ymax; y++)
         {
             for (x=0; x<xmax; x++)
@@ -923,6 +935,7 @@ static void interaction( sampData *sD, modelData *mD,
                 uin[y][2*x+1] = uin[y][2*x+1] + urefl[y][2*x+1];
             }
         }
+#endif /* ENABLE_BREMMER_REFLECTION */
     }
     else 
     {
@@ -991,7 +1004,7 @@ static void propagate(sampData *sD, modelData *mD)
     T = (4*mD->epsilonRe*mD->backRe)/((mD->epsilonRe+mD->backRe)*(mD->epsilonRe + mD->backRe));
 
     intensityTransmitted = 0.0;
-    /* Start propagate from z=0 to z=(SIMULATION_DEPTH-1), max{z}=(sD->zAnt-2) */
+    /* Start propagate from z=0 to z=(SIMULATION_DEPTH-1) */
     for (z=0; z<SIMULATION_DEPTH; z++)
     {
         /* Fill two layers in xy-plane with sample points */ 
@@ -1015,11 +1028,9 @@ static void propagate(sampData *sD, modelData *mD)
 #if ( CREATE_GEOMETRY_ONLY == 0)
         /* Migrate between the two layers */
         migrate(sD, mD, sampleLayer1, umig);
-        
-#if ( ENABLE_BREMMER_REFLECTION == 1)
+
         /* Calculate interaction between two layers */
         interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
-#endif /* ENABLE_BREMMER_REFLECTION */
 #endif /* CREATE_GEOMETRY_ONLY */
 
         /* Calculate loss in intensity due to absorption and the     */
@@ -1099,7 +1110,7 @@ int main(void)
     /******************* Field data ******************/
 
     /* RBC max size RBC_WIDTH is equivalent to rbcWidthInSampPoints*/
-    rbcWidthInSampPoints = sD.xbox;                               /* RBC width                          */
+    rbcWidthInSampPoints = sD.xbox - 2;                           /* RBC width excluding edges (the -2) */
     lambda = (rbcWidthInSampPoints/RBC_WIDTH)*LIGHT_WAVE_LENGTH;  /* Sample points                      */
     mD.afreq = 2*pi/lambda;                                       /* angular frequency c^{-1} s^{-1}    */
     mD.epsilonRe = RBC_PERMITIVITY_RE;                            /* Re permittivity RBC                */
