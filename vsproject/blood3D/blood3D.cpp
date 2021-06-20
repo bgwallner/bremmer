@@ -31,6 +31,13 @@
 #define BA_PERMITIVITY_RE      1.809
 #define BA_PERMITIVITY_IM      0.0
 
+/* RBC geometry parametric values */
+#define _R0  3.88
+#define _C0  0.81
+#define _C2  7.83
+#define _C4 -4.39
+
+
 /* These defines can be changed to modify the number of sampling-points     */
 /* of the whole model and the number of RBCs. Care must be taken so that    */
 /* the wavelength is sampled 10 times or more. E.g. MODEL_DIMENSION =       */
@@ -38,18 +45,21 @@
 /* If choosing MODEL_DIMENSION=1024 and having NBR_RBC_IN_ONE_ROW = 16      */
 /* would cause wavelength to be ~5 samplingpoints which is to small.        */
 
-/* Model size chosen as 2^N*1024, N=0,1,2...     */
-/* NOTICE! Log-files have a huge disk-demand and */
-/* if disk runs out of space program segfaults.  */
-/* Using 1024 roughly give 10GB of data.         */
+/* Model size chosen as 2^N*1024, N=0,1,2...        */
+/* NOTICE! Log-files have a huge disk-demand and    */
+/* if disk runs out of space the program segfaults. */
+/* Using 1024 roughly give 10GB of data.            */
+/* Verified to work up to N=3 -> 8192x8192 matrix   */
+/* while N=4 causes segmentation fault. May be      */
+/* due to fundamental datatype overflowing.         */
 #define MODEL_DIMENSION        1024
-/* Number of RBCs in one row, 2^N, N=0,1,2... */
+/* Number of RBCs in one row, 2^N, N=0,1,2...       */
 #define NBR_RBC_IN_ONE_ROW     8
 
 /* Number of iterations in migrate() for minimizing change of    */
 /* wavenumber due to difference in realpart of permitivity.      */
-/* Each calculation step is calculated epsi+d, epsi+2d,...,epsf  */
-/* get a smooth transition from epsi->epsf in steps of some d.   */
+/* Each calculation step is calculated eps0+d, eps0+2d,...,eps1  */
+/* get a smooth transition from eps0->eps1 in steps of some d.   */
 #define NBR_SMOOTING_ITERATIONS 3
 
 /* Choose *one* only angle setup for different simulations */
@@ -57,21 +67,44 @@
 #define ANGLE_THETA_ZERO       0
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
+/* When using fix theta the angles psi and fi can */
+/* either be random or fix 0.                     */
+#define ANGLE_RANDOM_PSI_FI    1
 
 /* Enable backward field */
 #define ENABLE_BREMMER_REFLECTION 1
 
+/* Enable random xy-plane translation of RBCs */
+#define ENABLE_RANDOM_TRANSLATION 1
+
+/* Enable custom RBC width. Otherwise set to */
+/* max size sD.xAnt / NBR_RBC_IN_ONE_ROW     */
+#define ENABLE_RBC_WIDTH_CUSTOM   0
+/* Custom width in sampling points */
+#define RBC_CUSTOM_WIDTH          128
+
 /* For creating geometrical model only. Mostly for test. */    
 #define CREATE_GEOMETRY_ONLY      0
 
+/* To be able som simulate depths larger than MODEL_DIMENSION */
+/* can run consequtive simulation using field output from     */
+/* previous simulation as initial value for the field. For    */
+/* each new simulation a new random 3D geometrical model is   */
+/* created. Arbitrary number of simulations can be created.   */
+/* Care should be taken for disk-space if logging fields.     */ 
+#define SIMULATION_NBR_OF_MODELS 1
+
 /* Number of layers to simulate in propagation direction */
-/* and must be less than MODEL_DIMENSION.                */
-#define SIMULATION_DEPTH       1020
+#define SIMULATION_DEPTH       MODEL_DIMENSION-1
 
 /**** Flags for debug output in textfiles ****/
 
-/* Print multipe layer of RBC to file */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE       1020
+/* Print multipe geometrical layer of RBC to file. If vertical  */
+/* field shall be plotted against geometrical model the value   */
+/* shall be set equal to SIMULATION_DEPTH to be able to plot    */
+/* in e.g. MATLAB. E.g. MODEL_DIMENSION=1024 will give          */
+/* output samplelayer1.txt -> samplelayer1022.txt.              */
+#define MULTIPLE_LAYER_NUMBER_TO_FILE       SIMULATION_DEPTH
 /* From which z-value to start print geometry */
 #define START_MULTIPLE_LAYER_NUMBER_TO_FILE 0
 /* Print all centers, angles etc for each RBC */
@@ -80,9 +113,9 @@
 #define TRANS_INTENSITY_TO_FILE             1
 /* Print vars in propagate(). For debug. */
 #define PRINT_MIGRATE_DATA                  0           
-/* Print field absolute E^2 to file */
+/* Print field absolute |E| to file */
 #define PRINT_MIGRATED_FIELD_TO_FILE        1
-/* Print field E^2 every N:th layer */
+/* Print field |E| every N:th layer */
 #define PRINT_FIELD_EVERY_NTH_LAYER         1
 
 /* File handles */
@@ -187,7 +220,7 @@ static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
         {
             /* Print real-part of the field */
             absoluteField = field[y][2*x]*field[y][2*x];
-            fprintf(fpMigratedField, "%.8f\t", sqrt(absoluteField)/initFieldValue);
+            fprintf(fpMigratedField, "%.4f\t", sqrt(absoluteField)/initFieldValue);
         }
         fprintf(fpMigratedField, "\n");
     }
@@ -411,16 +444,21 @@ static void initBloodData3DArray(sampData *sD, bloodData ****bD)
     nbrOfZbox = sD->zAnt/sD->zbox;
     nbrOfYbox = sD->yAnt/sD->ybox;
 
+    dx = 0;
+    dy = 0;
     for (zb = 0; zb < nbrOfZbox; zb++)
     {
         /* Displace centers of whole xy-plane layer         */
         /* in y-direction to create randomness in geometry. */
+#if (ENABLE_RANDOM_TRANSLATION == 1)
         dy = (int)random1((double)sD->ybox);
-
+#endif
         for (yb = 0; yb < nbrOfYbox; yb++)
         {
             /* For every fix yb translate in x-direction */
+#if (ENABLE_RANDOM_TRANSLATION == 1)
             dx = (int)random1((double)sD->xbox);
+#endif
             for (xb = 0; xb < nbrOfXbox; xb++)
             {
                 bD[zb][yb][xb]->dx = dx;
@@ -435,6 +473,11 @@ static void initBloodData3DArray(sampData *sD, bloodData ****bD)
                 /* (2+0.5)* 128 = 320, ... (7+0.5)*128 = 960                          */
 
                 /* Assign values for the Euler angles */
+
+                /* Init values */
+                bD[zb][yb][xb]->theta = 0.0;
+                bD[zb][yb][xb]->fi    = 0.0;
+                bD[zb][yb][xb]->psi   = 0.0;
 #if    (ANGLES_RANDOM == 1)
                 bD[zb][yb][xb]->theta = random1(pi);
                 bD[zb][yb][xb]->fi = random1(2*pi);
@@ -442,21 +485,27 @@ static void initBloodData3DArray(sampData *sD, bloodData ****bD)
 #endif
 
 #if    (ANGLE_THETA_ZERO == 1)
-                bD[zb][yb][xb]->theta = 0;
+                bD[zb][yb][xb]->theta = 0.0;
+#if    (ANGLE_RANDOM_PSI_FI == 1)
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
+#endif
 #endif
 
 #if    (ANGLE_THETA_PI_HALF == 1)
                 bD[zb][yb][xb]->theta = pi/2;
+#if    (ANGLE_RANDOM_PSI_FI == 1)
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
+#endif
 #endif
 
 #if    (ANGLE_THETA_PI_FOURTH == 1)
                 bD[zb][yb][xb]->theta = pi/4;
+#if    (ANGLE_RANDOM_PSI_FI == 1)
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
+#endif
 #endif
             }
         }
@@ -551,10 +600,10 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             /* take slightly more space than the size of the "box". In practice this is a   */
             /* neglectible problem.                                                         */
 
-            R0 = 3.91*cellsize/7.76;
-            C0 = 0.81*cellsize/7.76;
-            C2 = 7.83*cellsize/7.76;
-            C4 = -4.39*cellsize/7.76;
+            R0 = _R0*rbcWidthInSampPoints/RBC_WIDTH;
+            C0 = _C0*rbcWidthInSampPoints/RBC_WIDTH;
+            C2 = _C2*rbcWidthInSampPoints/RBC_WIDTH;
+            C4 = _C4*rbcWidthInSampPoints/RBC_WIDTH;
             /* Calculate (xe,ye) corresponding radius */
             Re = sqrt(pow(xe,2) + pow(ye,2));
 
@@ -913,6 +962,7 @@ static void interaction( sampData *sD, modelData *mD,
         fourn_wrapper( urefl, xmax, ymax, true ); /* inverse spatial FFT */
         fourn_wrapper( uin, xmax, ymax, true );
 
+#if ( ENABLE_BREMMER_REFLECTION == 1)
         for (y=0; y<ymax; y++)
         {
             for (x=0; x<xmax; x++)
@@ -923,6 +973,7 @@ static void interaction( sampData *sD, modelData *mD,
                 uin[y][2*x+1] = uin[y][2*x+1] + urefl[y][2*x+1];
             }
         }
+#endif /* ENABLE_BREMMER_REFLECTION */
     }
     else 
     {
@@ -991,7 +1042,7 @@ static void propagate(sampData *sD, modelData *mD)
     T = (4*mD->epsilonRe*mD->backRe)/((mD->epsilonRe+mD->backRe)*(mD->epsilonRe + mD->backRe));
 
     intensityTransmitted = 0.0;
-    /* Start propagate from z=0 to z=(SIMULATION_DEPTH-1), max{z}=(sD->zAnt-2) */
+    /* Start propagate from z=0 to z=(SIMULATION_DEPTH-1) */
     for (z=0; z<SIMULATION_DEPTH; z++)
     {
         /* Fill two layers in xy-plane with sample points */ 
@@ -1015,11 +1066,9 @@ static void propagate(sampData *sD, modelData *mD)
 #if ( CREATE_GEOMETRY_ONLY == 0)
         /* Migrate between the two layers */
         migrate(sD, mD, sampleLayer1, umig);
-        
-#if ( ENABLE_BREMMER_REFLECTION == 1)
+
         /* Calculate interaction between two layers */
         interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
-#endif /* ENABLE_BREMMER_REFLECTION */
 #endif /* CREATE_GEOMETRY_ONLY */
 
         /* Calculate loss in intensity due to absorption and the     */
@@ -1095,11 +1144,14 @@ int main(void)
     /* in RBC vs background                   */
     nbrOfSamplespointsInRbc = 0;
     nbrOfSamplespointsInBackground = 0;
-        
-    /******************* Field data ******************/
 
-    /* RBC max size RBC_WIDTH is equivalent to rbcWidthInSampPoints*/
-    rbcWidthInSampPoints = sD.xbox;                               /* RBC width                          */
+#if ( ENABLE_RBC_WIDTH_CUSTOM == 1)
+    rbcWidthInSampPoints = RBC_CUSTOM_WIDTH;                      /* RBC custom width */
+#else
+    rbcWidthInSampPoints = sD.xbox;                               /* RBC max width    */
+#endif /* ENABLE_RBC_WIDTH_CUSTOM */
+
+    /******************* Field data ******************/
     lambda = (rbcWidthInSampPoints/RBC_WIDTH)*LIGHT_WAVE_LENGTH;  /* Sample points                      */
     mD.afreq = 2*pi/lambda;                                       /* angular frequency c^{-1} s^{-1}    */
     mD.epsilonRe = RBC_PERMITIVITY_RE;                            /* Re permittivity RBC                */

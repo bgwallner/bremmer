@@ -65,13 +65,13 @@ for j = 1:NBR
     samplelayer = [dataArray{1:end-1}];
     
     % Take a section form the middle
-    verticalcut(j,:)=samplelayer(:,256);
+    verticalcut(j,:)=samplelayer(:,512);
+    verticalcut2(j,:)=samplelayer(512,:);
 end
 
 
 %##########################################
 NBR = 128;
-MF(NBR) = struct('cdata',[],'colormap',[]);
 for j = 1:NBR
     fprintf('Geometry layer:%d\n', j);
     %% Initialize variables
@@ -113,13 +113,7 @@ for j = 1:NBR
     % Create 3D matrix
     sample3D(:,:,j) = samplelayer;
 
-    % Plot contour of matrix
-    contour(samplelayer);
-    drawnow
-    MF(j) = getframe;
 end
-
-movie(MF);
 
 % % Prepare for 3D plot by extracting 0 from grid
 sample3D_reduced = sample3D(1:4:end,1:4:end,1:1:end);

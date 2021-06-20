@@ -31,6 +31,13 @@
 #define BA_PERMITIVITY_RE      1.809
 #define BA_PERMITIVITY_IM      0.0
 
+/* RBC geometry parametric values */
+#define _R0  3.88
+#define _C0  0.81
+#define _C2  7.83
+#define _C4 -4.39
+
+
 /* These defines can be changed to modify the number of sampling-points     */
 /* of the whole model and the number of RBCs. Care must be taken so that    */
 /* the wavelength is sampled 10 times or more. E.g. MODEL_DIMENSION =       */
@@ -42,6 +49,9 @@
 /* NOTICE! Log-files have a huge disk-demand and    */
 /* if disk runs out of space the program segfaults. */
 /* Using 1024 roughly give 10GB of data.            */
+/* Verified to work up to N=3 -> 8192x8192 matrix   */
+/* while N=4 causes segmentation fault. May be      */
+/* due to fundamental datatype overflowing.         */
 #define MODEL_DIMENSION        1024
 /* Number of RBCs in one row, 2^N, N=0,1,2...       */
 #define NBR_RBC_IN_ONE_ROW     8
@@ -57,9 +67,21 @@
 #define ANGLE_THETA_ZERO       0
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
+/* When using fix theta the angles psi and fi can */
+/* either be random or fix 0.                     */
+#define ANGLE_RANDOM_PSI_FI    1
 
 /* Enable backward field */
 #define ENABLE_BREMMER_REFLECTION 1
+
+/* Enable random xy-plane translation of RBCs */
+#define ENABLE_RANDOM_TRANSLATION 1
+
+/* Enable custom RBC width. Otherwise set to */
+/* max size sD.xAnt / NBR_RBC_IN_ONE_ROW     */
+#define ENABLE_RBC_WIDTH_CUSTOM   0
+/* Custom width in sampling points */
+#define RBC_CUSTOM_WIDTH          128
 
 /* For creating geometrical model only. Mostly for test. */    
 #define CREATE_GEOMETRY_ONLY      0
@@ -198,7 +220,7 @@ static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
         {
             /* Print real-part of the field */
             absoluteField = field[y][2*x]*field[y][2*x];
-            fprintf(fpMigratedField, "%.8f\t", sqrt(absoluteField)/initFieldValue);
+            fprintf(fpMigratedField, "%.4f\t", sqrt(absoluteField)/initFieldValue);
         }
         fprintf(fpMigratedField, "\n");
     }
@@ -422,16 +444,21 @@ static void initBloodData3DArray(sampData *sD, bloodData ****bD)
     nbrOfZbox = sD->zAnt/sD->zbox;
     nbrOfYbox = sD->yAnt/sD->ybox;
 
+    dx = 0;
+    dy = 0;
     for (zb = 0; zb < nbrOfZbox; zb++)
     {
         /* Displace centers of whole xy-plane layer         */
         /* in y-direction to create randomness in geometry. */
+#if (ENABLE_RANDOM_TRANSLATION == 1)
         dy = (int)random1((double)sD->ybox);
-
+#endif
         for (yb = 0; yb < nbrOfYbox; yb++)
         {
             /* For every fix yb translate in x-direction */
+#if (ENABLE_RANDOM_TRANSLATION == 1)
             dx = (int)random1((double)sD->xbox);
+#endif
             for (xb = 0; xb < nbrOfXbox; xb++)
             {
                 bD[zb][yb][xb]->dx = dx;
@@ -446,6 +473,11 @@ static void initBloodData3DArray(sampData *sD, bloodData ****bD)
                 /* (2+0.5)* 128 = 320, ... (7+0.5)*128 = 960                          */
 
                 /* Assign values for the Euler angles */
+
+                /* Init values */
+                bD[zb][yb][xb]->theta = 0.0;
+                bD[zb][yb][xb]->fi    = 0.0;
+                bD[zb][yb][xb]->psi   = 0.0;
 #if    (ANGLES_RANDOM == 1)
                 bD[zb][yb][xb]->theta = random1(pi);
                 bD[zb][yb][xb]->fi = random1(2*pi);
@@ -453,21 +485,27 @@ static void initBloodData3DArray(sampData *sD, bloodData ****bD)
 #endif
 
 #if    (ANGLE_THETA_ZERO == 1)
-                bD[zb][yb][xb]->theta = 0;
+                bD[zb][yb][xb]->theta = 0.0;
+#if    (ANGLE_RANDOM_PSI_FI == 1)
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
+#endif
 #endif
 
 #if    (ANGLE_THETA_PI_HALF == 1)
                 bD[zb][yb][xb]->theta = pi/2;
+#if    (ANGLE_RANDOM_PSI_FI == 1)
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
+#endif
 #endif
 
 #if    (ANGLE_THETA_PI_FOURTH == 1)
                 bD[zb][yb][xb]->theta = pi/4;
+#if    (ANGLE_RANDOM_PSI_FI == 1)
                 bD[zb][yb][xb]->fi = random1(2*pi);
                 bD[zb][yb][xb]->psi = random1(2*pi);
+#endif
 #endif
             }
         }
@@ -562,10 +600,10 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             /* take slightly more space than the size of the "box". In practice this is a   */
             /* neglectible problem.                                                         */
 
-            R0 = 3.91*cellsize/7.76;
-            C0 = 0.81*cellsize/7.76;
-            C2 = 7.83*cellsize/7.76;
-            C4 = -4.39*cellsize/7.76;
+            R0 = _R0*rbcWidthInSampPoints/RBC_WIDTH;
+            C0 = _C0*rbcWidthInSampPoints/RBC_WIDTH;
+            C2 = _C2*rbcWidthInSampPoints/RBC_WIDTH;
+            C4 = _C4*rbcWidthInSampPoints/RBC_WIDTH;
             /* Calculate (xe,ye) corresponding radius */
             Re = sqrt(pow(xe,2) + pow(ye,2));
 
@@ -1106,11 +1144,14 @@ int main(void)
     /* in RBC vs background                   */
     nbrOfSamplespointsInRbc = 0;
     nbrOfSamplespointsInBackground = 0;
-        
-    /******************* Field data ******************/
 
-    /* RBC max size RBC_WIDTH is equivalent to rbcWidthInSampPoints*/
-    rbcWidthInSampPoints = sD.xbox - 2;                           /* RBC width excluding edges (the -2) */
+#if ( ENABLE_RBC_WIDTH_CUSTOM == 1)
+    rbcWidthInSampPoints = RBC_CUSTOM_WIDTH;                      /* RBC custom width */
+#else
+    rbcWidthInSampPoints = sD.xbox;                               /* RBC max width    */
+#endif /* ENABLE_RBC_WIDTH_CUSTOM */
+
+    /******************* Field data ******************/
     lambda = (rbcWidthInSampPoints/RBC_WIDTH)*LIGHT_WAVE_LENGTH;  /* Sample points                      */
     mD.afreq = 2*pi/lambda;                                       /* angular frequency c^{-1} s^{-1}    */
     mD.epsilonRe = RBC_PERMITIVITY_RE;                            /* Re permittivity RBC                */
