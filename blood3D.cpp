@@ -55,7 +55,7 @@
 #define ONE_DIMENSIONAL_SLAB 0
 
 /* Use flag to have spherical symmetry instead of RBC shape */
-#define GEOMETRY_SPHERICAL 1
+#define GEOMETRY_SPHERICAL 0
 /* Radius of sphere giving eqv RBC volume 94 um^2 */
 #define SPHERE_RADIUS_EQ   46.52 /* radius=2.82 um and MODEL_DIMENSION=1024 */
 
@@ -112,7 +112,7 @@
 /* created. Arbitrary number of simulations can be created.   */
 /* Care should be taken for disk-space if logging fields.     */
 /* Values shall be 1,2,...N.                                  */
-#define MAX_MODEL_NUMBER 4
+#define MAX_MODEL_NUMBER 1
 
 /* Number of layers to simulate in propagation direction */
 #define SIMULATION_DEPTH       MODEL_DIMENSION-1
@@ -142,7 +142,7 @@
 
 /* Set in which model to print fields in   */
 /* Default set to "last" simulation model. */
-#define MODEL_NBR_TO_PRINT_FIELD_IN         0 //MAX_MODEL_NUMBER-1
+#define MODEL_NBR_TO_PRINT_FIELD_IN         MAX_MODEL_NUMBER-1
 
 /* File handles */
 static FILE *fpSampleLayer;
@@ -1139,7 +1139,7 @@ static void propagate(sampData *sD, modelData *mD)
     #endif /* PRINT_MIGRATED_FIELD_TO_FILE */
 
     #if (TRANS_INTENSITY_TO_FILE == TRUE)
-        fprintftransIntensityData(intensityMean/(1.0*xmax*ymax));
+        fprintftransIntensityData(intensityTransmitted/(1.0*xmax*ymax));
     #endif /* TRANS_INTENSITY_TO_FILE */
             printf("z=%d\t Transmitted powerflux:      Pt=%.8f\n", (z+1+modelNbr*MODEL_DIMENSION), intensityTransmitted/(1.0*xmax*ymax));
             printf("\t Reflected powerflux:        Pr=%.8f\n", intensityReflected/(1.0*xmax*ymax));
