@@ -1,4 +1,7 @@
-/* Bo-Göran Wallner 2021 */
+/* @Copywrite Bo-Göran Wallner 2021 */
+
+/* This code may not be used or duplicated for *any* purpose without written */
+/* permission by the author.                                                 */
 
 #include <stdio.h>
 #include <math.h>
@@ -14,20 +17,30 @@
 #define twopi                  6.283185307177959
 #define pi                     3.14159265358
 #define max32bit               4294967295
-#define initFieldValue         1000.0
+#define initFieldValue         1.0
 
 /* Development environment */
 #define GNU_LINUX              1
 
 /******************* Optical properties *********************/
-/* Value chosen according to "Simulations of light scattering from a biconcave     */ 
+/* Reference values according to "Simulations of light scattering from a biconcave */ 
 /* red blood cell using the finite-differencetime-domain method" by Jun Q. Lu for  */
 /* lambda = 700nm -> ni = 4.3*10^-6 -> ei = 2*nr*ni = 1.20916*10^-5                */
 /* lambda = 1000nm -> ni = 1.68*10^-5 -> ei = 6.64272*10^-5                        */
+
+/* Real-part values are chosen from "Numerical simulations of light scattering by  */
+/* red blood cells" by Karlsson, Anders etc.                                       */
+
+/* Absorption values chosen according to article:                                  */
+/* "A literature review and novel theoretical approach on the optical properties   */
+/*  of whole blood" by Nienke Bosschaart etc. This article also provide scattering */
+/* coefficient to be able to compare with the Bremmer series and to use consistent */
+/* values.                                                                         */
+/* lambda = 635nm  -> ua = 0.24 mm^-1 -> ei = 1.585952*10^-5                       */
 #define LIGHT_WAVE_LENGTH      0.6328  /* um */
 #define RBC_WIDTH              7.76    /* um */
 #define RBC_PERMITIVITY_RE     1.977
-#define RBC_PERMITIVITY_IM     0.0000120916
+#define RBC_PERMITIVITY_IM     0.00001585952
 #define BA_PERMITIVITY_RE      1.809
 #define BA_PERMITIVITY_IM      0.0
 
@@ -37,6 +50,14 @@
 #define _C2  7.83
 #define _C4 -4.39
 
+/* Use flag for simulating a one-dimensional slab. Possible */
+/* to compare with Fresnels equations for testing method.   */
+#define ONE_DIMENSIONAL_SLAB 0
+
+/* Use flag to have spherical symmetry instead of RBC shape */
+#define GEOMETRY_SPHERICAL 1
+/* Radius of sphere giving eqv RBC volume 94 um^2 */
+#define SPHERE_RADIUS_EQ   46.52 /* radius=2.82 um and MODEL_DIMENSION=1024 */
 
 /* These defines can be changed to modify the number of sampling-points     */
 /* of the whole model and the number of RBCs. Care must be taken so that    */
@@ -60,13 +81,14 @@
 /* wavenumber due to difference in realpart of permitivity.      */
 /* Each calculation step is calculated eps0+d, eps0+2d,...,eps1  */
 /* get a smooth transition from eps0->eps1 in steps of some d.   */
-#define NBR_SMOOTING_ITERATIONS 3
+#define NBR_SMOOTING_ITERATIONS 4
 
 /* Choose *one* only angle setup for different simulations */
-#define ANGLES_RANDOM          1
-#define ANGLE_THETA_ZERO       0
+#define ANGLES_RANDOM          0
+#define ANGLE_THETA_ZERO       1
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
+
 /* When using fix theta the angles psi and fi can */
 /* either be random or fix 0.                     */
 #define ANGLE_RANDOM_PSI_FI    1
@@ -77,22 +99,20 @@
 /* Enable random xy-plane translation of RBCs */
 #define ENABLE_RANDOM_TRANSLATION 1
 
-/* Enable custom RBC width. Otherwise set to */
-/* max size sD.xAnt / NBR_RBC_IN_ONE_ROW     */
+/* Enable custom RBC width. Otherwise is automatically */
+/*  set to max size sD.xAnt / NBR_RBC_IN_ONE_ROW       */
 #define ENABLE_RBC_WIDTH_CUSTOM   0
 /* Custom width in sampling points */
-#define RBC_CUSTOM_WIDTH          128
-
-/* For creating geometrical model only. Mostly for test. */    
-#define CREATE_GEOMETRY_ONLY      0
+#define RBC_CUSTOM_WIDTH          700
 
 /* To be able som simulate depths larger than MODEL_DIMENSION */
 /* can run consequtive simulation using field output from     */
 /* previous simulation as initial value for the field. For    */
 /* each new simulation a new random 3D geometrical model is   */
 /* created. Arbitrary number of simulations can be created.   */
-/* Care should be taken for disk-space if logging fields.     */ 
-#define SIMULATION_NBR_OF_MODELS 1
+/* Care should be taken for disk-space if logging fields.     */
+/* Values shall be 1,2,...N.                                  */
+#define MAX_MODEL_NUMBER 4
 
 /* Number of layers to simulate in propagation direction */
 #define SIMULATION_DEPTH       MODEL_DIMENSION-1
@@ -104,19 +124,25 @@
 /* shall be set equal to SIMULATION_DEPTH to be able to plot    */
 /* in e.g. MATLAB. E.g. MODEL_DIMENSION=1024 will give          */
 /* output samplelayer1.txt -> samplelayer1022.txt.              */
-#define MULTIPLE_LAYER_NUMBER_TO_FILE       SIMULATION_DEPTH
-/* From which z-value to start print geometry */
-#define START_MULTIPLE_LAYER_NUMBER_TO_FILE 0
+#define PRINT_GEOMETRY_TO_FILE       1
+/* Print geometry between START and STOP */
+#define START_PRINT_GEOMETRY_TO_FILE 0
+#define STOP_PRINT_GEOMETRY_TO_FILE  SIMULATION_DEPTH
+
 /* Print all centers, angles etc for each RBC */
-#define BLOOD_DATA_TO_FILE                  1
+#define BLOOD_DATA_TO_FILE                  0
+
 /* Print transmitted intensity I=I(z) */
-#define TRANS_INTENSITY_TO_FILE             1
-/* Print vars in propagate(). For debug. */
-#define PRINT_MIGRATE_DATA                  0           
+#define TRANS_INTENSITY_TO_FILE             TRUE
+
 /* Print field absolute |E| to file */
 #define PRINT_MIGRATED_FIELD_TO_FILE        1
-/* Print field |E| every N:th layer */
-#define PRINT_FIELD_EVERY_NTH_LAYER         1
+#define PRINT_FIELD_START                   0
+#define PRINT_FIELD_STOP                    SIMULATION_DEPTH
+
+/* Set in which model to print fields in   */
+/* Default set to "last" simulation model. */
+#define MODEL_NBR_TO_PRINT_FIELD_IN         0 //MAX_MODEL_NUMBER-1
 
 /* File handles */
 static FILE *fpSampleLayer;
@@ -125,6 +151,7 @@ static FILE* fpTransPower;
 static FILE* fpInteractionData;
 static FILE* fpMigrateData;
 static FILE* fpMigratedField;
+static FILE* fpImaginaryField;
 
 /* RBC width in sample points */
 static unsigned int rbcWidthInSampPoints;
@@ -204,7 +231,6 @@ static void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
 static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
 {
     int x, y;
-    double absoluteField;
     char buf[40];
     snprintf(buf, sizeof(buf), "data/fieldData/migratedfield%d.txt", z);
 
@@ -219,31 +245,36 @@ static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
         for (x = 0; x < sD->xAnt; x++)
         {
             /* Print real-part of the field */
-            absoluteField = field[y][2*x]*field[y][2*x];
-            fprintf(fpMigratedField, "%.4f\t", sqrt(absoluteField)/initFieldValue);
+            fprintf(fpMigratedField, "%.4f\t", field[y][2*x]/initFieldValue);
         }
         fprintf(fpMigratedField, "\n");
     }
     fclose(fpMigratedField);
 }
 
-static void fprintMigrateData(double epsr, double epsi, double w, double eta, double kr, 
-                              double ki, double k2r, double ga2i)
+/* Function prints one migrated field data to file */
+static void fprintfImaginaryFieldData(sampData* sD, MatDoub& field, int z)
 {
+    int x, y;
     char buf[40];
-    snprintf(buf, sizeof(buf), "data/modelData/migratedata.txt");
+    snprintf(buf, sizeof(buf), "data/fieldData/imaginaryfield%d.txt", z);
 
 #if ( GNU_LINUX == 1 )
-    fpMigrateData = fopen(buf, "a");
+    fpImaginaryField = fopen(buf, "w");
 #else
-    fopen_s(&fpMigrateData, buf, "a");
+    fopen_s(&fpImaginaryField, buf, "w");
 #endif
 
-    fprintf(fpMigrateData, "permitivity = %.8f-i %.15f\n", epsr, epsi);
-    fprintf(fpMigrateData, "angular freq = %.8f\t eta = %.8f\t kr = %.8f\t ki = %.8f\n", w, eta, kr, ki);
-    fprintf(fpMigrateData, "k2r = %.8f\t ga2i = %.15f\n", k2r, ga2i);
-    fprintf(fpMigrateData, "\n");
-    fclose(fpMigrateData);
+    for (y = 0; y < sD->yAnt; y++)
+    {
+        for (x = 0; x < sD->xAnt; x++)
+        {
+            /* Print real-part of the field */
+            fprintf(fpImaginaryField, "%.4f\t", field[y][2*x+1]/initFieldValue);
+        }
+        fprintf(fpImaginaryField, "\n");
+    }
+    fclose(fpImaginaryField);
 }
 
 void fprintfmodelData(FILE *fp, modelData *mD)
@@ -516,7 +547,7 @@ static void initBloodData3DArray(sampData *sD, bloodData ****bD)
 * Fill 2D geometry layer fox fixed z 
 */
 
-static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, int z)
+static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, int z, int modelNumber)
 {
     /* Coordinates in global coordinate system */
     int x, y, zb, xb, dx, dy, yb, cellsize, xmax, ymax;
@@ -611,12 +642,30 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
             dx = bD[yb][xb]->dx;
             dy = bD[yb][xb]->dy;
 
+#if (ONE_DIMENSIONAL_SLAB == 1)
+                /* One dimensional slab */
+                if ( z <= (MODEL_DIMENSION/2 + rbcWidthInSampPoints) && (z >= MODEL_DIMENSION/2) )
+                {
+                    geometry2D[x][y] = 1;
+                    nbrOfSamplespointsInRbc++;
+                }
+                else
+                {
+                    geometry2D[x][y] = 0;
+                    nbrOfSamplespointsInBackground++;
+                }
+#else
             /* Check if (xe,ye) is within disk since expression only valid within */
             /* it and that exclude e.g. corners of the cell.                      */
             if(Re < rbcWidthInSampPoints/2)
             {
-                /* Re is valid to use in the expression */
+#if ( GEOMETRY_SPHERICAL == 1 )
+                /* Spherical symmetry */
+                D_xDiff = pow(xe,2) + pow(ye,2) + pow(ze,2) - pow(SPHERE_RADIUS_EQ,2);
+#else
+                /* RBC - Re is valid to use in the expression */
                 D_xDiff = 4*pow(ze,2) - (1-pow(Re/R0,2)) * pow(C0 + C2*pow(Re/R0,2) + C4*pow(Re/R0,4), 2);
+#endif
                 /* Check if ze is outside or within the biconcave disk */
                 if ( D_xDiff > 0.0)
                 {
@@ -637,18 +686,21 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
                 geometry2D[(x+dx)%xmax][(y+dy)%ymax] = 0;
                 nbrOfSamplespointsInBackground++;
             }
+#endif
         }
     }
 
-#if ( MULTIPLE_LAYER_NUMBER_TO_FILE > 0)
-    /* Print layers with start START_MULTIPLE_LAYER_NUMBER_TO_FILE to files */
-    if ((z > START_MULTIPLE_LAYER_NUMBER_TO_FILE) && 
-        (z < (MULTIPLE_LAYER_NUMBER_TO_FILE + START_MULTIPLE_LAYER_NUMBER_TO_FILE)))
+#if ( PRINT_GEOMETRY_TO_FILE == 1)
+    if ( modelNumber == MODEL_NBR_TO_PRINT_FIELD_IN )
     {
-        fprintfsampData(sD, geometry2D, z);
+        /* Print layers with to files */
+        if ( (z >= START_PRINT_GEOMETRY_TO_FILE) && 
+             (z <= STOP_PRINT_GEOMETRY_TO_FILE) )
+        {
+            fprintfsampData(sD, geometry2D, z);
+        }
     }
 #endif
-
 }
 
 /* migrate the fields one layer ****************************************/
@@ -696,10 +748,6 @@ static void migrate(sampData *sD, modelData *mD, MatInt& slow, MatDoub& u1)
         epsi = -s* mD->epsilonIm;                                             /* Im permittivity*/
         compmult(eta, w, eta, w, &kr, &ki);                                   /* wave number, c^{-1} s */
         compmult(kr, ki, epsr, epsi, &k2r, &ga2i);                            /* sqr wave number, (kr+i*ki)(eps + i*epsi), .^{2} */
-
-#if ( PRINT_MIGRATE_DATA == 1 )
-        fprintMigrateData(epsr, epsi, w, eta, kr, ki, k2r, ga2i);
-#endif
 
         /* For ordering from fourn() see Numerical recipes users guide   */
         /* which gives separate cases of y=0 and y=ymax/2. All comments  */
@@ -942,7 +990,6 @@ static void interaction( sampData *sD, modelData *mD,
                 bga2r = bk2r + xiX*xiX + xiY*xiY;
                 compsqrt(bga2r, bga2i, &bgar, &bgai);
                 compdiv(gar-bgar, gai-bgai, gar+bgar, gai+bgai, &refr, &refi);
-                //compmult(refr, refi, uin[y][2*x], uin[y][2*x+1], &urefl[y][2*x], &urefl[y][2*x+1]);
 
                 /* Handle y array-index 1-511 */
                 /* xmax=1024 -> u[y][0], u[y][1] ... u[y][1022], u[y][1023] */
@@ -988,12 +1035,11 @@ static void interaction( sampData *sD, modelData *mD,
     }
 }
 
-
 /* main program to propagate the field through the a sequence of layers */
 static void propagate(sampData *sD, modelData *mD) 
 {
-    int x, y, z, xmax, ymax;
-    double intensityTransmitted, intensityReflected, T, sqrtEps;
+    int x, y, z, xmax, ymax, modelNbr;
+    double intensityTransmitted, intensityReflected, intensityMean, sqrtEps2, sqrtEps1, meanSqrtEps2, EphasorRe, EphasorIm;
 
     /* Indexing [z][y][x] will be used where z is in propagation direction  */
     /* Fields in plane [y][x] will have Re[field] = field[y][x]             */
@@ -1013,13 +1059,6 @@ static void propagate(sampData *sD, modelData *mD)
     /* Allocate memory for 3D array, every point containing bloodData */
     bD = mallocBloodData3DArray( sD->zAnt/sD->zbox, sD->yAnt/sD->ybox, sD->xAnt/sD->xbox );
 
-    /* Initialize the 3D grid, blood cell centers only */
-    initBloodData3DArray( sD, bD );
-
-#if ( BLOOD_DATA_TO_FILE == 1 )
-    fprintfBloodData(bD, NBR_RBC_IN_ONE_ROW, NBR_RBC_IN_ONE_ROW, NBR_RBC_IN_ONE_ROW);
-#endif /* BLOOD_DATA_TO_FILE */
-
     xmax = sD->xAnt;
     ymax = sD->yAnt;
 
@@ -1038,74 +1077,74 @@ static void propagate(sampData *sD, modelData *mD)
         }
     }
 
-    /* Calculate transmission coefficient T = 4*nrbc*nba/(nrbc+nba)^2 */
-    T = (4*mD->epsilonRe*mD->backRe)/((mD->epsilonRe+mD->backRe)*(mD->epsilonRe + mD->backRe));
-
-    intensityTransmitted = 0.0;
-    /* Start propagate from z=0 to z=(SIMULATION_DEPTH-1) */
-    for (z=0; z<SIMULATION_DEPTH; z++)
+    /* Numbers of models to simulate */
+    for (modelNbr=0; modelNbr<MAX_MODEL_NUMBER; modelNbr++ )
     {
-        /* Fill two layers in xy-plane with sample points */ 
-        create2DGeometry(sD, bD[z/sD->zbox], sampleLayer1, z);
-        create2DGeometry(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1);
+        /* Initialize the 3D grid, blood cell centers only */
+        initBloodData3DArray( sD, bD );
 
-        /* Calculate initial intensity I = v*eps*E^2 = sqrt(eps)*E^2 */
-        if (z == 0)
+        #if ( BLOOD_DATA_TO_FILE == 1 )
+            fprintfBloodData(bD, NBR_RBC_IN_ONE_ROW, NBR_RBC_IN_ONE_ROW, NBR_RBC_IN_ONE_ROW);
+        #endif /* BLOOD_DATA_TO_FILE */
+
+        /* Start propagate from z=0 to z=(SIMULATION_DEPTH-1) */
+        for (z=0; z<SIMULATION_DEPTH; z++)
         {
-            for (y=0; y<ymax; y++)
+            /* Fill two layers in xy-plane with sample points */ 
+            create2DGeometry(sD, bD[z/sD->zbox], sampleLayer1, z, modelNbr);
+            create2DGeometry(sD, bD[(z+1)/sD->zbox], sampleLayer2, z+1, modelNbr);
+
+            /* Migrate between the two layers */
+            migrate(sD, mD, sampleLayer1, umig);
+
+            /* Calculate interaction between two layers */
+            interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
+
+            intensityReflected   = 0.0;
+            intensityTransmitted = 0.0;
+            EphasorRe = 0.0;
+            EphasorIm = 0.0;
+            meanSqrtEps2 = 0.0;
+
+            /* Calculate resulting phasor? Sum_xy[umig[y][2*x]] + i*Sum_xy[umig[y][2*x+1]]  */
+            for ( y=0; y<ymax; y++)
             {
                 /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
                 for (x=0; x<xmax; x++)
                 {
-                    sqrtEps = sqrt((mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe))/mD->backRe);
-                    /* Real-part of field */
-                    intensityTransmitted += (umig[y][2*x]*umig[y][2*x])*sqrtEps/(initFieldValue * initFieldValue);
+                    /* test - calculate mean phasor */
+                    meanSqrtEps2+=sqrt((mD->backRe + sampleLayer2[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe);
+                    EphasorRe += umig[y][2*x];
+                    EphasorIm += umig[y][2*x+1];
+
+                    /* test end */
+                    sqrtEps2 = sqrt((mD->backRe + sampleLayer2[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe);
+                    sqrtEps1 = sqrt((mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe);
+                    intensityTransmitted += (umig[y][2*x]*umig[y][2*x]+umig[y][2*x+1]*umig[y][2*x+1])*sqrtEps2/(initFieldValue * initFieldValue);
+                    intensityReflected += (uref[y][2*x]*uref[y][2*x]+uref[y][2*x+1]*uref[y][2*x+1])*sqrtEps1/(initFieldValue * initFieldValue);
                 }
             }
-        }
-#if ( CREATE_GEOMETRY_ONLY == 0)
-        /* Migrate between the two layers */
-        migrate(sD, mD, sampleLayer1, umig);
 
-        /* Calculate interaction between two layers */
-        interaction(sD, mD, sampleLayer1, sampleLayer2, umig, uref);
-#endif /* CREATE_GEOMETRY_ONLY */
+            intensityMean = (EphasorRe*EphasorRe + EphasorIm*EphasorIm)*meanSqrtEps2/((1.0*xmax*ymax)*(1.0*xmax*ymax));
 
-        /* Calculate loss in intensity due to absorption and the     */
-        /* reflection. If the following condition is fullfilled      */
-        /* (samplelayer1[y][x]-samplelayer2[y][x]) != 0 then there   */
-        /* will be reflection between surfaces. This is valid for    */
-        /* both external and internal reflection.                    */
-        intensityReflected = 0.0;
-        for ( y=0; y<ymax; y++)
+    #if (PRINT_MIGRATED_FIELD_TO_FILE == 1)
+        if ( modelNbr == MODEL_NBR_TO_PRINT_FIELD_IN )
         {
-            /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
-            for (x=0; x<xmax; x++)
+            if( (z >= PRINT_FIELD_START) && (z <= PRINT_FIELD_STOP) )
             {
-                /* Intensity loss in both external and internal reflection */
-                if ((sampleLayer1[y][x] - sampleLayer2[y][x]) != 0)
-                {
-                    sqrtEps = sqrt((mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe);
-                    /* Real-part of field */
-                    intensityReflected += sqrtEps*(1.0-T)*(umig[y][2*x] * umig[y][2*x])/(initFieldValue * initFieldValue);
-                }
+                fprintfMigratedFieldData(sD, umig, z);
+                fprintfImaginaryFieldData(sD, umig, z);
             }
         }
+    #endif /* PRINT_MIGRATED_FIELD_TO_FILE */
 
-        /* Remove reflected intensity */
-        intensityTransmitted = intensityTransmitted - intensityReflected;
-
-#if (PRINT_MIGRATED_FIELD_TO_FILE == 1)
-    if( (z % PRINT_FIELD_EVERY_NTH_LAYER) == 0)
-    {
-        fprintfMigratedFieldData(sD, umig, z);
-    }
-#endif /* PRINT_MIGRATED_FIELD_TO_FILE */
-
-#if (TRANS_INTENSITY_TO_FILE == 1)
-    fprintftransIntensityData(intensityTransmitted/(1.0*xmax*ymax));
-#endif /* TRANS_INTENSITY_TO_FILE */
-        printf("z=%d\t Intensity transmitted=%.8f\n", z, intensityTransmitted/(1.0*xmax*ymax));
+    #if (TRANS_INTENSITY_TO_FILE == TRUE)
+        fprintftransIntensityData(intensityMean/(1.0*xmax*ymax));
+    #endif /* TRANS_INTENSITY_TO_FILE */
+            printf("z=%d\t Transmitted powerflux:      Pt=%.8f\n", (z+1+modelNbr*MODEL_DIMENSION), intensityTransmitted/(1.0*xmax*ymax));
+            printf("\t Reflected powerflux:        Pr=%.8f\n", intensityReflected/(1.0*xmax*ymax));
+            printf("\t From mean phasors:          Pr=%.8f\n", intensityMean/(1.0*xmax*ymax));
+        }
     }
 }
 

@@ -8,13 +8,17 @@ hold on
 plot(transpowerfluxrandom,':')
 hold on
 
+
+ 
 volumeFraction = 0.2134;
 lambda = 10.437938144329898;
 nRBC = 4.3*10^-6;
-z=4*pi*(volumeFraction*nRBC/lambda)*[1:1:1020];
-beer = exp(-z);
-
-plot(beer,':')
+%z=4*pi*(volumeFraction*nRBC/lambda)*[1:1:1020];
+figure
+depth=0.52729*[0:0.99328/16368:0.99328];
+%z=0.5273*[1:1:1020];
+beer = exp(-depth*0.52729);
+plot(depth,beer,':')
 hold off
 
 xlabel('Propagation depth 0 - 62\mum')   % x-axis label
