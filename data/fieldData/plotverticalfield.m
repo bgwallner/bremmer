@@ -9,7 +9,7 @@
 
 NBR = 1019;
 START_ET = 1;
-END_ET = NBR;
+END_ET = 2; %NBR;
 loops = END_ET - START_ET;
 Mov(loops) = struct('cdata',[],'colormap',[]);
 index = 1;
@@ -21,6 +21,8 @@ for j = 1:NBR
 %############# USER DEFINED ###############
 
     % Absolute path to samplelayer files
+    %fileBase = 'C:\github\bremmer_master\vsproject\blood3D\data\fieldData\migratedfield';
+    %fileBase2 = 'C:\github\bremmer_master\vsproject\blood3D\data\fieldData\imaginaryfield';
     fileBase = 'C:\github\bremmer_master\data\fieldData\migratedfield';
     fileBase2 = 'C:\github\bremmer_master\data\fieldData\imaginaryfield';
     

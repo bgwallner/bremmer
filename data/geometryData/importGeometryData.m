@@ -33,6 +33,7 @@ for j = 1:NBR
 %############# USER DEFINED ###############
 
     % Absolute path to samplelayer files
+    %fileBase = 'C:\github\bremmer_master\vsproject\blood3D\data\geometryData\samplelayer';
     fileBase = 'C:\github\bremmer_master\data\geometryData\samplelayer';
     
 %##########################################

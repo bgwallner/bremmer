@@ -1,4 +1,4 @@
-/* @Copywrite Bo-Göran Wallner 2021 */
+/* @Copyright Bo-Göran Wallner 2021 */
 
 /* This code may not be used or duplicated for *any* purpose without written */
 /* permission by the author.                                                 */
@@ -18,6 +18,7 @@
 #define pi                     3.14159265358
 #define max32bit               4294967295
 #define initFieldValue         1.0
+#define twoPiInDegrees         360
 
 /* Development environment */
 #define GNU_LINUX              1
@@ -36,12 +37,12 @@
 /*  of whole blood" by Nienke Bosschaart etc. This article also provide scattering */
 /* coefficient to be able to compare with the Bremmer series and to use consistent */
 /* values.                                                                         */
-/* lambda = 635nm  -> ua = 0.24 mm^-1 -> ei = 1.585952*10^-5                       */
+/* lambda = 635nm  -> ua = 0.24 mm^-1 -> ei = 3.3984678*10^-5                      */
 #define LIGHT_WAVE_LENGTH      0.6328  /* um */
 #define RBC_WIDTH              7.76    /* um */
-#define RBC_PERMITIVITY_RE     1.977
-#define RBC_PERMITIVITY_IM     0.00001585952
-#define BA_PERMITIVITY_RE      1.809
+#define RBC_PERMITIVITY_RE     1.0929//1.977
+#define RBC_PERMITIVITY_IM     0.000033984678
+#define BA_PERMITIVITY_RE      1.00//1.809
 #define BA_PERMITIVITY_IM      0.0
 
 /* RBC geometry parametric values */
@@ -53,6 +54,10 @@
 /* Use flag for simulating a one-dimensional slab. Possible */
 /* to compare with Fresnels equations for testing method.   */
 #define ONE_DIMENSIONAL_SLAB 0
+#define RECTANGLE_START      256
+#define RECTANGLE_END        768
+#define SLAB_START           512
+#define SLAB_END             768
 
 /* Use flag to have spherical symmetry instead of RBC shape */
 #define GEOMETRY_SPHERICAL 0
@@ -81,7 +86,7 @@
 /* wavenumber due to difference in realpart of permitivity.      */
 /* Each calculation step is calculated eps0+d, eps0+2d,...,eps1  */
 /* get a smooth transition from eps0->eps1 in steps of some d.   */
-#define NBR_SMOOTING_ITERATIONS 4
+#define NBR_SMOOTING_ITERATIONS 3
 
 /* Choose *one* only angle setup for different simulations */
 #define ANGLES_RANDOM          0
@@ -133,7 +138,7 @@
 #define BLOOD_DATA_TO_FILE                  0
 
 /* Print transmitted intensity I=I(z) */
-#define TRANS_INTENSITY_TO_FILE             TRUE
+#define TRANS_INTENSITY_TO_FILE             1
 
 /* Print field absolute |E| to file */
 #define PRINT_MIGRATED_FIELD_TO_FILE        1
@@ -142,7 +147,7 @@
 
 /* Set in which model to print fields in   */
 /* Default set to "last" simulation model. */
-#define MODEL_NBR_TO_PRINT_FIELD_IN         MAX_MODEL_NUMBER-1
+#define MODEL_NBR_TO_PRINT_FIELD_IN         0 //MAX_MODEL_NUMBER-1
 
 /* File handles */
 static FILE *fpSampleLayer;
@@ -644,10 +649,22 @@ static void create2DGeometry(sampData *sD, bloodData ***bD, MatInt& geometry2D, 
 
 #if (ONE_DIMENSIONAL_SLAB == 1)
                 /* One dimensional slab */
-                if ( z <= (MODEL_DIMENSION/2 + rbcWidthInSampPoints) && (z >= MODEL_DIMENSION/2) )
+                if ( z <= (SLAB_END) && (z >= SLAB_START) )
                 {
-                    geometry2D[x][y] = 1;
-                    nbrOfSamplespointsInRbc++;
+                    if (x >= RECTANGLE_START && x <= RECTANGLE_END && 
+                        y >= RECTANGLE_START && y <= RECTANGLE_END)
+                    {
+                        geometry2D[x][y] = 1;
+                        nbrOfSamplespointsInRbc++;
+
+                    }
+                    else
+                    {
+                        geometry2D[x][y] = 0;
+                        nbrOfSamplespointsInBackground++;
+                    }
+                    //geometry2D[x][y] = 1;
+                    //nbrOfSamplespointsInRbc++;
                 }
                 else
                 {
@@ -1038,8 +1055,9 @@ static void interaction( sampData *sD, modelData *mD,
 /* main program to propagate the field through the a sequence of layers */
 static void propagate(sampData *sD, modelData *mD) 
 {
-    int x, y, z, xmax, ymax, modelNbr;
-    double intensityTransmitted, intensityReflected, intensityMean, sqrtEps2, sqrtEps1, meanSqrtEps2, EphasorRe, EphasorIm;
+    int x, y, z, xmax, ymax, modelNbr, i, samples;
+    double intensityTransmitted, intensityReflected, intensityTimeTrans, intensityTimeRefl;
+    double EphasorReT, EphasorImT, EphasorReR, EphasorImR, wt, sqrtEps2, sqrtEps1, sin2wt, cos2wt;
 
     /* Indexing [z][y][x] will be used where z is in propagation direction  */
     /* Fields in plane [y][x] will have Re[field] = field[y][x]             */
@@ -1102,30 +1120,35 @@ static void propagate(sampData *sD, modelData *mD)
 
             intensityReflected   = 0.0;
             intensityTransmitted = 0.0;
-            EphasorRe = 0.0;
-            EphasorIm = 0.0;
-            meanSqrtEps2 = 0.0;
 
-            /* Calculate resulting phasor? Sum_xy[umig[y][2*x]] + i*Sum_xy[umig[y][2*x+1]]  */
+            /* Calculate intensity (time-averaged Poynting vector) from phasors.  */
             for ( y=0; y<ymax; y++)
             {
                 /* E.g. sD->xAnt = 1024 s.p. x=0,1,..,1023 -> max{2x+1}=2*1023 + 1 = 2047 */
                 for (x=0; x<xmax; x++)
                 {
-                    /* test - calculate mean phasor */
-                    meanSqrtEps2+=sqrt((mD->backRe + sampleLayer2[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe);
-                    EphasorRe += umig[y][2*x];
-                    EphasorIm += umig[y][2*x+1];
-
-                    /* test end */
                     sqrtEps2 = sqrt((mD->backRe + sampleLayer2[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe);
                     sqrtEps1 = sqrt((mD->backRe + sampleLayer1[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe);
-                    intensityTransmitted += (umig[y][2*x]*umig[y][2*x]+umig[y][2*x+1]*umig[y][2*x+1])*sqrtEps2/(initFieldValue * initFieldValue);
-                    intensityReflected += (uref[y][2*x]*uref[y][2*x]+uref[y][2*x+1]*uref[y][2*x+1])*sqrtEps1/(initFieldValue * initFieldValue);
+
+                    /* Time-dependent physical field E(t)=E'cos(wt)+E''sin(wt) */
+                    EphasorReT = umig[y][2*x];   /* Transmitted E'  */
+                    EphasorImT = umig[y][2*x+1]; /* Transmitted E'' */
+                    EphasorReR = uref[y][2*x];   /* Reflected E'    */
+                    EphasorImR = uref[y][2*x+1]; /* Reflected E''   */
+
+                    /* Intensity = n*c*E(t)^2 ~ sqrt(eps)*(E'cos(wt))^2 + (E''sin(wt))^2 + E'E''sin(2wt) */
+                    intensityTimeTrans = 0.0;
+                    intensityTimeRefl  = 0.0;
+ 
+                    /* <Intensity> = nc x EE* ~ sqrt(eps)*(E'^2 + E''^2) */
+                    intensityTimeTrans = (EphasorReT * EphasorReT + EphasorImT * EphasorImT) * sqrtEps2;
+                    intensityTimeRefl = (EphasorReR * EphasorReR + EphasorImR * EphasorImR) * sqrtEps1;
+
+                    /* Add to intensities for whole layer */
+                    intensityTransmitted += intensityTimeTrans;
+                    intensityReflected += intensityTimeRefl;
                 }
             }
-
-            intensityMean = (EphasorRe*EphasorRe + EphasorIm*EphasorIm)*meanSqrtEps2/((1.0*xmax*ymax)*(1.0*xmax*ymax));
 
     #if (PRINT_MIGRATED_FIELD_TO_FILE == 1)
         if ( modelNbr == MODEL_NBR_TO_PRINT_FIELD_IN )
@@ -1138,12 +1161,11 @@ static void propagate(sampData *sD, modelData *mD)
         }
     #endif /* PRINT_MIGRATED_FIELD_TO_FILE */
 
-    #if (TRANS_INTENSITY_TO_FILE == TRUE)
+    #if (TRANS_INTENSITY_TO_FILE == 1)
         fprintftransIntensityData(intensityTransmitted/(1.0*xmax*ymax));
     #endif /* TRANS_INTENSITY_TO_FILE */
             printf("z=%d\t Transmitted powerflux:      Pt=%.8f\n", (z+1+modelNbr*MODEL_DIMENSION), intensityTransmitted/(1.0*xmax*ymax));
             printf("\t Reflected powerflux:        Pr=%.8f\n", intensityReflected/(1.0*xmax*ymax));
-            printf("\t From mean phasors:          Pr=%.8f\n", intensityMean/(1.0*xmax*ymax));
         }
     }
 }
