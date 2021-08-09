@@ -9,7 +9,7 @@
 
 NBR = 1019;
 START_ET = 1;
-END_ET = 2; %NBR;
+END_ET = NBR;
 loops = END_ET - START_ET;
 Mov(loops) = struct('cdata',[],'colormap',[]);
 index = 1;
@@ -72,7 +72,7 @@ for j = 1:NBR
             s.FaceColor='interp';
             set(s, 'EdgeColor', 'none')
             colorbar
-            caxis([0 1.5])
+            caxis([-1.5 1.5])
             %drawnow
             Mov(index) = getframe;
             index=index+1;
