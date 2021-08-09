@@ -89,8 +89,8 @@
 #define NBR_SMOOTING_ITERATIONS 3
 
 /* Choose *one* only angle setup for different simulations */
-#define ANGLES_RANDOM          0
-#define ANGLE_THETA_ZERO       1
+#define ANGLES_RANDOM          1
+#define ANGLE_THETA_ZERO       0
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
 
@@ -117,7 +117,7 @@
 /* created. Arbitrary number of simulations can be created.   */
 /* Care should be taken for disk-space if logging fields.     */
 /* Values shall be 1,2,...N.                                  */
-#define MAX_MODEL_NUMBER 16
+#define MAX_MODEL_NUMBER 1
 
 /* Number of layers to simulate in propagation direction */
 #define SIMULATION_DEPTH       MODEL_DIMENSION-1
@@ -129,7 +129,7 @@
 /* shall be set equal to SIMULATION_DEPTH to be able to plot    */
 /* in e.g. MATLAB. E.g. MODEL_DIMENSION=1024 will give          */
 /* output samplelayer1.txt -> samplelayer1022.txt.              */
-#define PRINT_GEOMETRY_TO_FILE       0
+#define PRINT_GEOMETRY_TO_FILE       1
 /* Print geometry between START and STOP */
 #define START_PRINT_GEOMETRY_TO_FILE 0
 #define STOP_PRINT_GEOMETRY_TO_FILE  SIMULATION_DEPTH
@@ -141,13 +141,13 @@
 #define TRANS_INTENSITY_TO_FILE             1
 
 /* Print field absolute |E| to file */
-#define PRINT_MIGRATED_FIELD_TO_FILE        0
+#define PRINT_MIGRATED_FIELD_TO_FILE        1
 #define PRINT_FIELD_START                   0
 #define PRINT_FIELD_STOP                    SIMULATION_DEPTH
 
 /* Set in which model to print fields in   */
 /* Default set to "last" simulation model. */
-#define MODEL_NBR_TO_PRINT_FIELD_IN         0 //MAX_MODEL_NUMBER-1
+#define MODEL_NBR_TO_PRINT_FIELD_IN         MAX_MODEL_NUMBER-1
 
 /* File handles */
 static FILE *fpSampleLayer;
