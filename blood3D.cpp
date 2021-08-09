@@ -40,9 +40,9 @@
 /* lambda = 635nm  -> ua = 0.24 mm^-1 -> ei = 3.3984678*10^-5                      */
 #define LIGHT_WAVE_LENGTH      0.6328  /* um */
 #define RBC_WIDTH              7.76    /* um */
-#define RBC_PERMITIVITY_RE     1.0929//1.977
+#define RBC_PERMITIVITY_RE     1.977
 #define RBC_PERMITIVITY_IM     0.000033984678
-#define BA_PERMITIVITY_RE      1.00//1.809
+#define BA_PERMITIVITY_RE      1.809
 #define BA_PERMITIVITY_IM      0.0
 
 /* RBC geometry parametric values */
@@ -89,8 +89,8 @@
 #define NBR_SMOOTING_ITERATIONS 3
 
 /* Choose *one* only angle setup for different simulations */
-#define ANGLES_RANDOM          0
-#define ANGLE_THETA_ZERO       1
+#define ANGLES_RANDOM          1
+#define ANGLE_THETA_ZERO       0
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
 
@@ -147,7 +147,7 @@
 
 /* Set in which model to print fields in   */
 /* Default set to "last" simulation model. */
-#define MODEL_NBR_TO_PRINT_FIELD_IN         0 //MAX_MODEL_NUMBER-1
+#define MODEL_NBR_TO_PRINT_FIELD_IN         MAX_MODEL_NUMBER-1
 
 /* File handles */
 static FILE *fpSampleLayer;
