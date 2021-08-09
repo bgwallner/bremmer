@@ -1,7 +1,4 @@
-/* @Copyright Bo-Göran Wallner 2021 */
-
-/* This code may not be used or duplicated for *any* purpose without written */
-/* permission by the author.                                                 */
+/* Bo-Göran Wallner 2021 */
 
 #include <stdio.h>
 #include <math.h>
