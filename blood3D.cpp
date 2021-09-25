@@ -83,11 +83,11 @@
 /* wavenumber due to difference in realpart of permitivity.      */
 /* Each calculation step is calculated eps0+d, eps0+2d,...,eps1  */
 /* get a smooth transition from eps0->eps1 in steps of some d.   */
-#define NBR_SMOOTING_ITERATIONS 3
+#define NBR_SMOOTING_ITERATIONS 5
 
 /* Choose *one* only angle setup for different simulations */
-#define ANGLES_RANDOM          1
-#define ANGLE_THETA_ZERO       0
+#define ANGLES_RANDOM          0
+#define ANGLE_THETA_ZERO       1
 #define ANGLE_THETA_PI_HALF    0
 #define ANGLE_THETA_PI_FOURTH  0
 
@@ -105,7 +105,7 @@
 /*  set to max size sD.xAnt / NBR_RBC_IN_ONE_ROW       */
 #define ENABLE_RBC_WIDTH_CUSTOM   0
 /* Custom width in sampling points */
-#define RBC_CUSTOM_WIDTH          700
+#define RBC_CUSTOM_WIDTH          256
 
 /* To be able som simulate depths larger than MODEL_DIMENSION */
 /* can run consequtive simulation using field output from     */
@@ -137,10 +137,12 @@
 /* Print transmitted intensity I=I(z) */
 #define TRANS_INTENSITY_TO_FILE             1
 
-/* Print field absolute |E| to file */
+/* Print electric field to file, real-part and imaginary part */
 #define PRINT_MIGRATED_FIELD_TO_FILE        1
 #define PRINT_FIELD_START                   0
 #define PRINT_FIELD_STOP                    SIMULATION_DEPTH
+/* Using this flag will print sqrt(eps)*E^2 instead of real-part */
+#define PRINT_MIGRATED_INTENSITY            1
 
 /* Set in which model to print fields in   */
 /* Default set to "last" simulation model. */
@@ -230,9 +232,10 @@ static void fprintfsampData(sampData *sD, MatInt& geometry2D, int z)
 }
 
 /* Function prints one migrated field data to file */
-static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
+static void fprintfMigratedFieldData(sampData* sD, modelData* mD, MatDoub& field, MatInt& sampleLayer, int z)
 {
     int x, y;
+    double sqrtEps2;
     char buf[40];
     snprintf(buf, sizeof(buf), "data/fieldData/migratedfield%d.txt", z);
 
@@ -246,8 +249,14 @@ static void fprintfMigratedFieldData(sampData* sD, MatDoub& field, int z)
     {
         for (x = 0; x < sD->xAnt; x++)
         {
+#if ( PRINT_MIGRATED_INTENSITY == 1 )
+            /* Print transmitted intensity distribution */
+            sqrtEps2 = sqrt((mD->backRe + sampleLayer[y][x] * (mD->epsilonRe - mD->backRe)) / mD->backRe);
+            fprintf(fpMigratedField, "%.4f\t", sqrtEps2 *(field[y][2*x]*field[y][2*x] + field[y][2*x+1]*field[y][2*x+1]) /(initFieldValue*initFieldValue));
+#else
             /* Print real-part of the field */
             fprintf(fpMigratedField, "%.4f\t", field[y][2*x]/initFieldValue);
+#endif
         }
         fprintf(fpMigratedField, "\n");
     }
@@ -1152,7 +1161,7 @@ static void propagate(sampData *sD, modelData *mD)
         {
             if( (z >= PRINT_FIELD_START) && (z <= PRINT_FIELD_STOP) )
             {
-                fprintfMigratedFieldData(sD, umig, z);
+                fprintfMigratedFieldData(sD, mD, umig, sampleLayer2, z);
                 fprintfImaginaryFieldData(sD, umig, z);
             }
         }
